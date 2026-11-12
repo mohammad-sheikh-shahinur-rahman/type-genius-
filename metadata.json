@@ -1,0 +1,6 @@
+{
+  "name": "TypeGenius Keyboard",
+  "description": "Backendless privacy-first smart native Android keyboard with spacebar swipe language switching, local dictionaries, and Bengali phonetic support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

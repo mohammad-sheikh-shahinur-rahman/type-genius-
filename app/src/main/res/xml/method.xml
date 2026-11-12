@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.example.MainActivity"
+    android:isDefault="false"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:label="English (US)"
+        android:imeSubtypeLocale="en_US"
+        android:imeSubtypeMode="keyboard" />
+    <subtype
+        android:label="বাংলা (Bengali)"
+        android:imeSubtypeLocale="bn_BD"
+        android:imeSubtypeMode="keyboard" />
+    <subtype
+        android:label="हिन्दी (Hindi)"
+        android:imeSubtypeLocale="hi_IN"
+        android:imeSubtypeMode="keyboard" />
+    <subtype
+        android:label="العربية (Arabic)"
+        android:imeSubtypeLocale="ar"
+        android:imeSubtypeMode="keyboard" />
+</input-method>
