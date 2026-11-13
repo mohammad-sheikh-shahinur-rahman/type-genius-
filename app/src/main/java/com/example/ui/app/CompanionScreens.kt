@@ -32,8 +32,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
@@ -106,19 +111,24 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
     val savedSrc by settingsManager.translatorSourceCode.collectAsState(initial = "bn")
     val savedTgt by settingsManager.translatorTargetCode.collectAsState(initial = "en")
     val historyEntries by OfflineTranslator.observeHistory(context).collectAsState(initial = emptyList())
+    val downloadedPacks by settingsManager.downloadedTranslatorPacks.collectAsState(initial = emptySet())
     val scope = rememberCoroutineScope()
 
     var sourceCode by remember(savedSrc) { mutableStateOf(savedSrc) }
     var targetCode by remember(savedTgt) { mutableStateOf(savedTgt) }
     var inputText by remember { mutableStateOf("ami bangladesh valobashi") }
     var result by remember { mutableStateOf(OfflineTranslator.translate("ami bangladesh valobashi", "bn", "en")) }
+    var showPackManager by remember { mutableStateOf(false) }
+    var downloadingCode by remember { mutableStateOf<String?>(null) }
+    var downloadingAll by remember { mutableStateOf(false) }
+    var packUpdateTick by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(downloadedPacks, packUpdateTick) {
         OfflineTranslator.initialize(context)
         result = OfflineTranslator.translateWithMemory(context, inputText, sourceCode, targetCode)
     }
 
-    LaunchedEffect(inputText, sourceCode, targetCode) {
+    LaunchedEffect(inputText, sourceCode, targetCode, downloadedPacks, packUpdateTick) {
         result = OfflineTranslator.translate(inputText, sourceCode, targetCode)
         result = OfflineTranslator.translateWithMemory(context, inputText, sourceCode, targetCode)
     }
@@ -130,11 +140,15 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
 
     val srcLang = langs.find { it.code == sourceCode } ?: langs.first()
     val tgtLang = langs.find { it.code == targetCode } ?: langs[1]
+    val extraPacks = remember(langs) { langs.filter { !it.isBundledCore } }
+    val installedExtraCount = remember(downloadedPacks, packUpdateTick) {
+        extraPacks.count { OfflineTranslator.isPackReady(context, it.code, downloadedPacks) }
+    }
     val detectedLang = remember(result.detectedSourceLanguage, sourceCode) {
         val det = result.detectedSourceLanguage
         if (det != null && det != sourceCode) langs.find { it.code == det } else null
     }
-    val modelStats = remember(OfflineTranslator.isPackLoadedFromAssets()) {
+    val modelStats = remember(OfflineTranslator.isPackLoadedFromAssets(), downloadedPacks, packUpdateTick) {
         OfflineTranslator.getModelStats()
     }
     val sampleInputs = listOf(
@@ -157,11 +171,19 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Icon(Icons.Default.Translate, contentDescription = null, tint = Color(0xFF00E676))
                     Column {
                         Text("On-Device Offline Translator", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("${langs.size} Languages • ${modelStats.first + modelStats.second} Local Entries", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = "${langs.size} Languages ($installedExtraCount/${extraPacks.size} Extra Packs) • ${modelStats.first + modelStats.second} Entries",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
                 Box(
@@ -208,6 +230,182 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
                     modifier = Modifier.weight(1f).testTag("translator_tgt_button")
                 ) {
                     Text(tgtLang.nativeName, fontSize = 12.sp, maxLines = 1)
+                }
+            }
+
+            val missingSelectedCode = when {
+                !OfflineTranslator.isPackReady(context, targetCode, downloadedPacks) -> targetCode
+                !OfflineTranslator.isPackReady(context, sourceCode, downloadedPacks) -> sourceCode
+                else -> null
+            }
+            if (missingSelectedCode != null) {
+                val missingLang = langs.find { it.code == missingSelectedCode }
+                Button(
+                    onClick = {
+                        downloadingCode = missingSelectedCode
+                        scope.launch {
+                            val installRes = OfflineTranslator.downloadLanguagePack(context, missingSelectedCode)
+                            downloadingCode = null
+                            packUpdateTick++
+                            Toast.makeText(
+                                context,
+                                "${missingLang?.name ?: missingSelectedCode} অফলাইন প্যাক ডাউনলোড সম্পন্ন (${installRes.entryCount} এন্ট্রি)",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    enabled = downloadingCode == null && !downloadingAll,
+                    colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp)
+                        .testTag("translator_inline_download_btn")
+                ) {
+                    if (downloadingCode == missingSelectedCode) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("ডাউনলোড হচ্ছে...")
+                    } else {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("ভাষা ডাউনলোড: ${missingLang?.nativeName ?: missingSelectedCode} (${OfflineTranslator.getPackSizeLabel(context, missingSelectedCode)})")
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = { showPackManager = !showPackManager },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .testTag("translator_manage_packs_btn")
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp), tint = TGMagenta)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "অফলাইন ভাষা ডাউনলোড ম্যানেজার ($installedExtraCount/${extraPacks.size} প্যাক)",
+                    fontSize = 12.5.sp,
+                    color = TGMagenta,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (showPackManager) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (showPackManager) "Hide Packs" else "Show Packs",
+                    tint = TGMagenta
+                )
+            }
+
+            AnimatedVisibility(visible = showPackManager) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "অতিরিক্ত ১৬টি অফলাইন ভাষা প্যাক",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Button(
+                            onClick = {
+                                downloadingAll = true
+                                scope.launch {
+                                    val results = OfflineTranslator.downloadAllLanguagePacks(context)
+                                    downloadingAll = false
+                                    packUpdateTick++
+                                    Toast.makeText(context, "${results.size}টি অফলাইন ভাষা প্যাক ইনস্টল হয়েছে", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = !downloadingAll && downloadingCode == null,
+                            colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .defaultMinSize(minHeight = 40.dp)
+                                .testTag("translator_download_all_packs_btn")
+                        ) {
+                            Text(if (downloadingAll) "ডাউনলোড..." else "সব ডাউনলোড", fontSize = 11.sp)
+                        }
+                    }
+
+                    extraPacks.forEach { lang ->
+                        val isInstalled = OfflineTranslator.isPackReady(context, lang.code, downloadedPacks)
+                        val sizeLabel = remember(lang.code, isInstalled) {
+                            OfflineTranslator.getPackSizeLabel(context, lang.code)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${lang.nativeName} (${lang.name})",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isInstalled) "ডাউনলোড সম্পন্ন • $sizeLabel" else "অফলাইন প্যাক • $sizeLabel",
+                                    fontSize = 10.5.sp,
+                                    color = if (isInstalled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (downloadingCode == lang.code) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = TGMagenta)
+                            } else if (isInstalled) {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            OfflineTranslator.removeLanguagePack(context, lang.code)
+                                            packUpdateTick++
+                                            Toast.makeText(context, "${lang.name} প্যাক রিমুভ হয়েছে", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .testTag("translator_pack_btn_${lang.code}")
+                                ) {
+                                    Text("রিমুভ", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error)
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = {
+                                        downloadingCode = lang.code
+                                        scope.launch {
+                                            OfflineTranslator.downloadLanguagePack(context, lang.code)
+                                            downloadingCode = null
+                                            packUpdateTick++
+                                            Toast.makeText(context, "${lang.name} প্যাক ডাউনলোড হয়েছে", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .testTag("translator_pack_btn_${lang.code}")
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp), tint = TGMagenta)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("ডাউনলোড", fontSize = 11.5.sp, color = TGMagenta)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -860,7 +1058,10 @@ fun BackendlessVerificationScreen() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GeneralSettingsScreen(settingsManager: SettingsManager) {
+fun GeneralSettingsScreen(
+    settingsManager: SettingsManager,
+    onNavigateToAbout: () -> Unit = {}
+) {
     val context = LocalContext.current
     val isSystemDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
@@ -1116,23 +1317,18 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                         if (apiKeyInput.isNotBlank()) {
                             OutlinedButton(
                                 onClick = {
-                                    val cleaned = apiKeyInput.trim()
-                                        .replace("\n", "")
-                                        .replace("\r", "")
-                                        .replace("\t", "")
-                                        .replace(" ", "")
+                                    val cleaned = GeminiDirectClient.sanitizeKey(apiKeyInput)
                                     apiKeyInput = cleaned
                                     testApiLoading = true
                                     testApiResult = null
                                     scope.launch {
                                         settingsManager.setGeminiApiKey(cleaned)
-                                        val res = GeminiDirectClient().executeDirectPrompt(
-                                            apiKey = cleaned,
-                                            prompt = "Respond with 'Direct Connection Verified: TypeGenius AI Ready' in 7 words or less."
-                                        )
+                                        val res = GeminiDirectClient().testConnection(cleaned)
                                         testApiLoading = false
                                         res.onSuccess { testApiResult = "SUCCESS: $it" }
-                                            .onFailure { testApiResult = "ERROR: ${it.message}" }
+                                            .onFailure {
+                                                testApiResult = "ERROR: ${it.message}\nNote: Offline TypeGenius AI remains ready anytime without cloud delay."
+                                            }
                                     }
                                 },
                                 modifier = Modifier
@@ -1157,6 +1353,55 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                             Text(res, color = if (res.startsWith("SUCCESS")) Color(0xFF4CAF50) else Color(0xFFFF5252), fontSize = 12.sp)
                         }
                     }
+                }
+            }
+        }
+
+        @Composable
+        fun AboutCompanyCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToAbout)
+                    .testTag("settings_about_card")
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(TGMagenta.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Business, contentDescription = "About App & Company", tint = TGMagenta)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "About ${AppAboutMetadata.APP_NAME}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Version ${AppAboutMetadata.VERSION_NAME} • ${AppAboutMetadata.COMPANY_NAME}",
+                            fontSize = 12.sp,
+                            color = TGMagenta,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "অ্যাপের সকল ফিচার, প্যাকেজ তথ্য ও কোম্পানি প্রোফাইল দেখুন →",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Default.Info, contentDescription = "Open About", tint = TGMagenta)
                 }
             }
         }
@@ -1187,6 +1432,7 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                         ThemeCard()
                         PhotoBackgroundThemeCard(settingsManager = settingsManager)
                         ToolbarCustomizerCard(settingsManager = settingsManager)
+                        AboutCompanyCard()
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TypingPreferencesCard()
@@ -1205,6 +1451,7 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                 PersonalShortcutsCard()
                 CustomAiPromptsCard(settingsManager = settingsManager)
                 DirectGeminiCard()
+                AboutCompanyCard()
             }
         }
     }

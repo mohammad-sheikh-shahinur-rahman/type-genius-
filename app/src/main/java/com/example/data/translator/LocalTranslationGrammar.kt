@@ -28,7 +28,10 @@ data class TranslatedToken(
 
 object LocalTranslationGrammar {
 
-    private val sovLanguages = setOf("bn", "banglish", "syl", "hi", "ur", "as", "ne", "fa", "ja", "ko", "tr")
+    private val sovLanguages = setOf(
+        "bn", "banglish", "syl", "hi", "ur", "as", "ne", "fa", "ja", "ko", "tr",
+        "ta", "te", "gu", "pa", "ml", "kn", "mr", "sa"
+    )
 
     fun wordOrderOf(langCode: String): WordOrder {
         return if (langCode in sovLanguages) WordOrder.SOV else WordOrder.SVO
@@ -51,6 +54,14 @@ object LocalTranslationGrammar {
         var bnCount = 0
         var sylNagriCount = 0
         var devanagariCount = 0
+        var tamilCount = 0
+        var teluguCount = 0
+        var kannadaCount = 0
+        var malayalamCount = 0
+        var gujaratiCount = 0
+        var punjabiCount = 0
+        var hebrewCount = 0
+        var thaiCount = 0
         var arabicCount = 0
         var cyrillicCount = 0
         var hangulCount = 0
@@ -63,6 +74,14 @@ object LocalTranslationGrammar {
                 in 0x0980..0x09FF -> bnCount++
                 in 0xA800..0xA82F -> sylNagriCount++
                 in 0x0900..0x097F -> devanagariCount++
+                in 0x0B80..0x0BFF -> tamilCount++
+                in 0x0C00..0x0C7F -> teluguCount++
+                in 0x0C80..0x0CFF -> kannadaCount++
+                in 0x0D00..0x0D7F -> malayalamCount++
+                in 0x0A80..0x0AFF -> gujaratiCount++
+                in 0x0A00..0x0A7F -> punjabiCount++
+                in 0x0590..0x05FF -> hebrewCount++
+                in 0x0E00..0x0E7F -> thaiCount++
                 in 0x0600..0x06FF -> arabicCount++
                 in 0x0400..0x04FF -> cyrillicCount++
                 in 0xAC00..0xD7AF, in 0x1100..0x11FF -> hangulCount++
@@ -77,12 +96,23 @@ object LocalTranslationGrammar {
             val sylhetiMarkers = listOf("বালা", "আফনে", "আছইননি", "কিতা", "শুকরিয়া", "হকলতা", "যাইরাম", "খাইরাম", "তুমারে")
             return if (sylhetiMarkers.any { trimmed.contains(it) }) "syl" else "bn"
         }
+        if (tamilCount > 0) return "ta"
+        if (teluguCount > 0) return "te"
+        if (kannadaCount > 0) return "kn"
+        if (malayalamCount > 0) return "ml"
+        if (gujaratiCount > 0) return "gu"
+        if (punjabiCount > 0) return "pa"
+        if (hebrewCount > 0) return "he"
+        if (thaiCount > 0) return "th"
         if (devanagariCount > 0) return "hi"
         if (arabicCount > 0) {
             val urduMarkers = listOf('ٹ', 'ڈ', 'ڑ', 'ے', 'ں', 'ہ', 'پ', 'چ', 'ژ', 'گ')
             return if (trimmed.any { it in urduMarkers }) "ur" else "ar"
         }
-        if (cyrillicCount > 0) return "ru"
+        if (cyrillicCount > 0) {
+            val ukrainianMarkers = listOf('і', 'ї', 'є', 'ґ', 'І', 'Ї', 'Є', 'Ґ')
+            return if (trimmed.any { it in ukrainianMarkers }) "uk" else "ru"
+        }
         if (hangulCount > 0) return "ko"
         if (japaneseCount > 0) return "ja"
         if (cjkCount > 0) return "zh"
@@ -292,7 +322,7 @@ object LocalTranslationGrammar {
     fun localizePunctuation(punct: String, targetLang: String): String {
         if (punct.isEmpty()) return ""
         return when (targetLang) {
-            "bn", "syl", "hi", "as", "ne" -> punct.replace('.', '।')
+            "bn", "syl", "hi", "as", "ne", "sa" -> punct.replace('.', '।')
             "ar", "ur", "fa" -> punct.replace('?', '؟')
             else -> punct.replace('।', '.').replace('؟', '?')
         }

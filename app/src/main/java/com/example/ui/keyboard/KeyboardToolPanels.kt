@@ -156,7 +156,7 @@ fun NumpadPanel(
  * Col 1 (tall): [<]
  * Col 2: [^], [Select], [v]
  * Col 3 (tall): [>]
- * Col 4: [Select all], [Copy], [Paste]
+ * Col 4: [Select all], [Copy], [Cut], [Paste]
  * Bottom Row: [|<], [>|], [⌫]
  */
 @Composable
@@ -167,6 +167,7 @@ fun TextEditorPanel(
     onMoveToEnd: (select: Boolean) -> Unit,
     onSelectAll: () -> Unit,
     onCopy: () -> Unit,
+    onCut: () -> Unit = {},
     onPaste: () -> Unit,
     onBackspace: () -> Unit,
     onHaptic: () -> Unit,
@@ -185,7 +186,7 @@ fun TextEditorPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(186.dp),
+                .height(210.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Col 1: Tall Left Arrow (<)
@@ -273,7 +274,7 @@ fun TextEditorPanel(
                 )
             }
 
-            // Col 4: Select all, Copy, Paste
+            // Col 4: Select all, Copy, Cut, Paste
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -297,6 +298,15 @@ fun TextEditorPanel(
                 ) {
                     onHaptic()
                     onCopy()
+                }
+                EditorTextTile(
+                    text = "Cut",
+                    isHighlighted = false,
+                    colors = colors,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("editor_cut")
+                ) {
+                    onHaptic()
+                    onCut()
                 }
                 EditorTextTile(
                     text = "Paste",

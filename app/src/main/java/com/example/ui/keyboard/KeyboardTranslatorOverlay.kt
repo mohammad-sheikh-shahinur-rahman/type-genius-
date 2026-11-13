@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -44,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,9 +65,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.example.data.SettingsManager
 import com.example.data.ai.GeminiDirectClient
 import com.example.data.translator.OfflineTranslationResult
 import com.example.data.translator.OfflineTranslator
+import com.example.data.translator.TranslationPackManager
 import kotlinx.coroutines.launch
 
 enum class TranslatorPickerTarget {
@@ -111,6 +116,8 @@ fun InKeyboardLiveTranslatorBox(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val settingsManager = remember(context) { SettingsManager.getInstance(context) }
+    val downloadedPacks by settingsManager.downloadedTranslatorPacks.collectAsState(initial = emptySet())
     val langs = OfflineTranslator.supportedLanguages
 
     val combinedSourceText = remember(sourceText, composingPreview) {
@@ -120,6 +127,7 @@ fun InKeyboardLiveTranslatorBox(
     var manualTriggerTick by remember { mutableStateOf(0) }
     var aiPolishedResult by remember { mutableStateOf<String?>(null) }
     var aiLoading by remember { mutableStateOf(false) }
+    var downloadingPackCode by remember { mutableStateOf<String?>(null) }
 
     var offlineResult by remember {
         mutableStateOf(
@@ -135,7 +143,7 @@ fun InKeyboardLiveTranslatorBox(
         OfflineTranslator.initialize(context)
     }
 
-    LaunchedEffect(combinedSourceText, sourceCode, targetCode, isLiveMode, manualTriggerTick) {
+    LaunchedEffect(combinedSourceText, sourceCode, targetCode, isLiveMode, manualTriggerTick, downloadedPacks) {
         aiPolishedResult = null
         if (combinedSourceText.isBlank()) {
             offlineResult = OfflineTranslationResult("", sourceCode, targetCode, false)
@@ -152,6 +160,13 @@ fun InKeyboardLiveTranslatorBox(
     val srcNative = srcLang?.nativeName ?: sourceCode
     val tgtNative = tgtLang?.nativeName ?: targetCode
     val isTargetRtl = targetCode in setOf("ar", "fa", "ur", "he")
+    val missingPackCode = remember(sourceCode, targetCode, downloadedPacks) {
+        when {
+            !OfflineTranslator.isPackReady(context, targetCode, downloadedPacks) -> targetCode
+            !OfflineTranslator.isPackReady(context, sourceCode, downloadedPacks) -> sourceCode
+            else -> null
+        }
+    }
 
     val detectedLang = remember(offlineResult.detectedSourceLanguage, sourceCode, combinedSourceText) {
         val det = offlineResult.detectedSourceLanguage
@@ -263,6 +278,65 @@ fun InKeyboardLiveTranslatorBox(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+            }
+
+            if (missingPackCode != null) {
+                val missingLang = langs.find { it.code == missingPackCode }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(TranslatorAccentBlue.copy(alpha = 0.16f))
+                        .border(1.dp, TranslatorAccentBlue.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .testTag("ime_translator_inline_download_btn")
+                        .clickable {
+                            onHaptic()
+                            downloadingPackCode = missingPackCode
+                            scope.launch {
+                                OfflineTranslator.downloadLanguagePack(context, missingPackCode)
+                                downloadingPackCode = null
+                                manualTriggerTick++
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Download Language Pack",
+                            tint = Color(0xFF60A5FA),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "${missingLang?.nativeName ?: missingPackCode} প্যাক ডাউনলোড করুন (Offline)",
+                            color = Color.White,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (downloadingPackCode == missingPackCode) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(15.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "ডাউনলোড",
+                            color = Color(0xFF60A5FA),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
@@ -696,7 +770,17 @@ fun TranslatorLanguagePickerOverlay(
     onHaptic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settingsManager = remember(context) { SettingsManager.getInstance(context) }
+    val downloadedPacks by settingsManager.downloadedTranslatorPacks.collectAsState(initial = emptySet())
+    var downloadingCode by remember { mutableStateOf<String?>(null) }
+    var isDownloadingAll by remember { mutableStateOf(false) }
+
     val langs = OfflineTranslator.supportedLanguages
+    val missingCount = remember(downloadedPacks) {
+        langs.count { !it.isBundledCore && !OfflineTranslator.isPackReady(context, it.code, downloadedPacks) }
+    }
     val titleSuffix = if (pickerTarget == TranslatorPickerTarget.SOURCE) "Source" else "Target"
 
     Box(
@@ -711,30 +795,89 @@ fun TranslatorLanguagePickerOverlay(
             color = Color.White,
             tonalElevation = 8.dp,
             modifier = Modifier
-                .fillMaxWidth(0.90f)
-                .widthIn(max = 420.dp)
-                .heightIn(max = 420.dp)
+                .fillMaxWidth(0.92f)
+                .widthIn(max = 440.dp)
+                .heightIn(max = 460.dp)
                 .padding(8.dp)
                 .clickable(enabled = false) {}
                 .testTag("ime_translator_language_picker")
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-                Text(
-                    text = "অনুবাদ ভাষা বেছে নিন ($titleSuffix)",
-                    color = Color(0xFF1A1C1E),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "অনুবাদ ভাষা (${langs.size}) • $titleSuffix",
+                            color = Color(0xFF1A1C1E),
+                            fontSize = 16.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (missingCount > 0) "$missingCount টি অতিরিক্ত অফলাইন প্যাক ডাউনলোডযোগ্য" else "সকল ৩৮টি ভাষার অফলাইন প্যাক প্রস্তুত",
+                            color = Color(0xFF5F6368),
+                            fontSize = 11.sp
+                        )
+                    }
+                    if (missingCount > 0) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(TranslatorAccentBlue.copy(alpha = 0.12f))
+                                .testTag("ime_translator_download_all_btn")
+                                .clickable(enabled = !isDownloadingAll) {
+                                    onHaptic()
+                                    isDownloadingAll = true
+                                    scope.launch {
+                                        OfflineTranslator.downloadAllLanguagePacks(context)
+                                        isDownloadingAll = false
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (isDownloadingAll) {
+                                CircularProgressIndicator(
+                                    color = TranslatorAccentBlue,
+                                    modifier = Modifier.size(13.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Download All Languages",
+                                    tint = TranslatorAccentBlue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Text(
+                                text = "সব ডাউনলোড",
+                                color = TranslatorAccentBlue,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(10.dp))
 
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        .heightIn(max = 290.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                        .heightIn(max = 310.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     items(langs, key = { it.code }) { lang ->
                         val isSelected = lang.code == selectedCode
+                        val isReady = OfflineTranslator.isPackReady(context, lang.code, downloadedPacks)
+                        val isThisDownloading = downloadingCode == lang.code
+                        val sizeLabel = remember(lang.code, downloadedPacks, isDownloadingAll) {
+                            OfflineTranslator.getPackSizeLabel(context, lang.code)
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -745,8 +888,18 @@ fun TranslatorLanguagePickerOverlay(
                                 )
                                 .clickable {
                                     onHaptic()
-                                    onLanguageSelected(lang.code)
-                                    onDismiss()
+                                    if (!lang.isBundledCore && !isReady) {
+                                        downloadingCode = lang.code
+                                        scope.launch {
+                                            OfflineTranslator.downloadLanguagePack(context, lang.code)
+                                            downloadingCode = null
+                                            onLanguageSelected(lang.code)
+                                            onDismiss()
+                                        }
+                                    } else {
+                                        onLanguageSelected(lang.code)
+                                        onDismiss()
+                                    }
                                 }
                                 .padding(horizontal = 4.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -755,8 +908,18 @@ fun TranslatorLanguagePickerOverlay(
                                 selected = isSelected,
                                 onClick = {
                                     onHaptic()
-                                    onLanguageSelected(lang.code)
-                                    onDismiss()
+                                    if (!lang.isBundledCore && !isReady) {
+                                        downloadingCode = lang.code
+                                        scope.launch {
+                                            OfflineTranslator.downloadLanguagePack(context, lang.code)
+                                            downloadingCode = null
+                                            onLanguageSelected(lang.code)
+                                            onDismiss()
+                                        }
+                                    } else {
+                                        onLanguageSelected(lang.code)
+                                        onDismiss()
+                                    }
                                 },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = TranslatorAccentBlue,
@@ -773,23 +936,93 @@ fun TranslatorLanguagePickerOverlay(
                                         text = lang.nativeName,
                                         color = Color(0xFF1A1C1E),
                                         fontSize = 15.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     if (lang.name != lang.nativeName) {
                                         Text(
                                             text = "(${lang.name})",
                                             color = Color(0xFF5F6368),
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.Normal
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
                                 Text(
-                                    text = "✓ 100% Offline",
-                                    color = Color(0xFF2E7D32),
+                                    text = when {
+                                        lang.isBundledCore -> "✓ 100% Offline • Built-in"
+                                        isReady -> "✓ Downloaded Offline ($sizeLabel)"
+                                        else -> "↓ Tap to download ($sizeLabel)"
+                                    },
+                                    color = if (isReady) Color(0xFF2E7D32) else Color(0xFF5F6368),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
+                            }
+
+                            if (!lang.isBundledCore) {
+                                if (isThisDownloading) {
+                                    CircularProgressIndicator(
+                                        color = TranslatorAccentBlue,
+                                        modifier = Modifier
+                                            .padding(end = 8.dp)
+                                            .size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else if (!isReady) {
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(TranslatorAccentBlue.copy(alpha = 0.12f))
+                                            .testTag("ime_translator_download_${lang.code}")
+                                            .clickable {
+                                                onHaptic()
+                                                downloadingCode = lang.code
+                                                scope.launch {
+                                                    OfflineTranslator.downloadLanguagePack(context, lang.code)
+                                                    downloadingCode = null
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Download,
+                                            contentDescription = "Download ${lang.name}",
+                                            tint = TranslatorAccentBlue,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = "Download",
+                                            color = TranslatorAccentBlue,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            onHaptic()
+                                            scope.launch {
+                                                OfflineTranslator.removeLanguagePack(context, lang.code)
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .testTag("ime_translator_remove_${lang.code}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Remove ${lang.name} Pack",
+                                            tint = Color(0xFF64748B),
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

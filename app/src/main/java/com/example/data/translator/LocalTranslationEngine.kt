@@ -112,22 +112,28 @@ object LocalTranslationEngine {
     )
 
     @Volatile
+    private var basePhraseRows: List<Map<String, String>> = corePhraseTable
+
+    @Volatile
+    private var baseLexiconRows: List<LexiconEntry> = coreLexiconEntries
+
+    @Volatile
     private var phraseRows: List<Map<String, String>> = corePhraseTable
 
     @Volatile
     private var lexiconRows: List<LexiconEntry> = coreLexiconEntries
 
-    // Fast normalized lookup index: cleanPhraseLower -> Map<langCode, phrase>
+    // Fast normalized lookup index: cleanPhraseLower -> List of matching rows
     @Volatile
-    private var phraseIndex: Map<String, Map<String, String>> = buildPhraseIndex(corePhraseTable)
+    private var phraseIndex: Map<String, List<Map<String, String>>> = buildPhraseIndex(corePhraseTable)
 
-    private fun buildPhraseIndex(rows: List<Map<String, String>>): Map<String, Map<String, String>> {
-        val map = LinkedHashMap<String, Map<String, String>>(rows.size * 10)
+    private fun buildPhraseIndex(rows: List<Map<String, String>>): Map<String, List<Map<String, String>>> {
+        val map = LinkedHashMap<String, MutableList<Map<String, String>>>(rows.size * 8)
         for (row in rows) {
             for (value in row.values) {
                 val key = cleanPhraseKey(value)
-                if (key.isNotEmpty() && !map.containsKey(key)) {
-                    map[key] = row
+                if (key.isNotEmpty()) {
+                    map.getOrPut(key) { mutableListOf() }.add(row)
                 }
             }
         }
@@ -191,15 +197,81 @@ object LocalTranslationEngine {
                         }
                     }
 
-                    phraseRows = loadedPhrases
-                    lexiconRows = loadedLexicon
-                    phraseIndex = buildPhraseIndex(loadedPhrases)
+                    basePhraseRows = loadedPhrases
+                    baseLexiconRows = loadedLexicon
+                    applyWithDownloadedPacks(context, loadedPhrases, loadedLexicon)
                     isAssetPackLoaded = true
                 } catch (_: Exception) {
-                    // Graceful fallback to embedded core model if asset is unavailable
+                    applyWithDownloadedPacks(context, corePhraseTable, coreLexiconEntries)
                 }
             }
         }
+    }
+
+    suspend fun reloadDownloadedPacks(context: Context) {
+        if (!isAssetPackLoaded) {
+            ensureLoaded(context)
+            return
+        }
+        loadMutex.withLock {
+            withContext(Dispatchers.IO) {
+                applyWithDownloadedPacks(context, basePhraseRows, baseLexiconRows)
+            }
+        }
+    }
+
+    private fun applyWithDownloadedPacks(
+        context: Context,
+        coreAndAssetPhrases: List<Map<String, String>>,
+        coreAndAssetLexicon: List<LexiconEntry>
+    ) {
+        val mergedPhrases = coreAndAssetPhrases.toMutableList()
+        val mergedLexicon = coreAndAssetLexicon.toMutableList()
+
+        runCatching {
+            val packDir = TranslationPackManager.getPackDir(context)
+            packDir.listFiles()
+                ?.filter { it.isFile && it.extension == "json" && it.length() > 0L }
+                ?.forEach { file ->
+                    val root = JSONObject(file.readText(Charsets.UTF_8))
+                    val pArr = root.optJSONArray("phrases")
+                    if (pArr != null) {
+                        for (i in 0 until pArr.length()) {
+                            val obj = pArr.optJSONObject(i) ?: continue
+                            val row = LinkedHashMap<String, String>()
+                            val keys = obj.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                val v = obj.optString(k)
+                                if (v.isNotBlank()) row[k] = v
+                            }
+                            if (row.isNotEmpty()) mergedPhrases.add(row)
+                        }
+                    }
+                    val lArr = root.optJSONArray("lexicon")
+                    if (lArr != null) {
+                        for (i in 0 until lArr.length()) {
+                            val obj = lArr.optJSONObject(i) ?: continue
+                            val pos = runCatching { PosTag.valueOf(obj.optString("pos", "OTHER")) }.getOrDefault(PosTag.OTHER)
+                            val translations = LinkedHashMap<String, String>()
+                            val keys = obj.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                if (k == "pos") continue
+                                val v = obj.optString(k)
+                                if (v.isNotBlank()) translations[k] = v
+                            }
+                            if (translations.isNotEmpty()) {
+                                mergedLexicon.add(LexiconEntry(pos = pos, translations = translations))
+                            }
+                        }
+                    }
+                }
+        }
+
+        phraseRows = mergedPhrases
+        lexiconRows = mergedLexicon
+        phraseIndex = buildPhraseIndex(mergedPhrases)
     }
 
     fun getModelStats(): Pair<Int, Int> {
@@ -315,7 +387,7 @@ object LocalTranslationEngine {
             val cleanClauseKey = cleanPhraseKey(normalizedClause)
 
             // 1. Exact phrase match on clause
-            val exactRow = findPhraseRow(cleanClauseKey, sourceLangCode)
+            val exactRow = findPhraseRow(cleanClauseKey, sourceLangCode, targetLangCode)
             if (exactRow != null) {
                 val targetPhrase = exactRow[targetLangCode] ?: exactRow["en"]
                 if (targetPhrase != null) {
@@ -345,7 +417,7 @@ object LocalTranslationEngine {
                 for (len in maxWindow downTo 2) {
                     val slice = rawTokens.subList(idx, idx + len)
                     val joinedClean = cleanPhraseKey(slice.joinToString(" "))
-                    val matchRow = findPhraseRow(joinedClean, sourceLangCode)
+                    val matchRow = findPhraseRow(joinedClean, sourceLangCode, targetLangCode)
                     val target = matchRow?.get(targetLangCode) ?: matchRow?.get("en")
                     if (target != null) {
                         ngramMatchedLen = len
@@ -455,19 +527,53 @@ object LocalTranslationEngine {
         )
     }
 
-    private fun findPhraseRow(cleanKey: String, sourceLangCode: String): Map<String, String>? {
+    private fun findPhraseRow(
+        cleanKey: String,
+        sourceLangCode: String,
+        targetLangCode: String
+    ): Map<String, String>? {
         if (cleanKey.isEmpty()) return null
-        // Prefer rows that match explicitly in sourceLangCode first
+        // 1. Prefer rows matching both sourceLangCode and containing targetLangCode
+        for (row in phraseRows) {
+            val srcVal = row[sourceLangCode]?.let { cleanPhraseKey(it) }
+            if (srcVal == cleanKey && row.containsKey(targetLangCode)) return row
+        }
+        // 2. Fallback via index preferring rows that have targetLangCode
+        val indexed = phraseIndex[cleanKey].orEmpty()
+        indexed.firstOrNull { it.containsKey(targetLangCode) }?.let { return it }
+
+        // 3. Fallback preferring explicit sourceLangCode match
         for (row in phraseRows) {
             val srcVal = row[sourceLangCode]?.let { cleanPhraseKey(it) }
             if (srcVal == cleanKey) return row
         }
-        return phraseIndex[cleanKey]
+        return indexed.firstOrNull()
     }
 
     private fun findWordWithPos(word: String, src: String, tgt: String): Pair<String, PosTag>? {
         val stemCandidates = LocalTranslationGrammar.generateStemCandidates(word, src)
 
+        // Pass 1: Prefer exact targetLangCode presence in lexicon then phraseRows
+        for (stem in stemCandidates) {
+            for (entry in lexiconRows) {
+                val rowSrc = entry.translations[src]?.lowercase()
+                if ((rowSrc == stem || entry.translations.values.any { it.lowercase() == stem }) &&
+                    entry.translations.containsKey(tgt)
+                ) {
+                    return entry.translations[tgt]!! to entry.pos
+                }
+            }
+            for (entry in phraseRows) {
+                val rowSrc = entry[src]?.lowercase()
+                if ((rowSrc == stem || entry.values.any { it.lowercase() == stem }) &&
+                    entry.containsKey(tgt)
+                ) {
+                    return entry[tgt]!! to PosTag.OTHER
+                }
+            }
+        }
+
+        // Pass 2: Bridge/fallback to "en" if target missing
         for (stem in stemCandidates) {
             for (entry in lexiconRows) {
                 val rowSrc = entry.translations[src]?.lowercase()

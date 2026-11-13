@@ -72,6 +72,7 @@ class SettingsManager(private val context: Context) {
         val KEY_CUSTOM_AI_PROMPTS = stringPreferencesKey("custom_ai_prompts")
         val KEY_NOTEPAD_DRAFT = stringPreferencesKey("notepad_draft")
         val KEY_USER_TEMPLATES = stringPreferencesKey("user_templates")
+        val KEY_DOWNLOADED_TRANSLATOR_PACKS = stringSetPreferencesKey("downloaded_translator_packs")
 
         val DEFAULT_USER_TEMPLATES: List<String> = listOf(
             "আসসালামু আলাইকুম, কেমন আছেন?",
@@ -472,6 +473,31 @@ class SettingsManager(private val context: Context) {
                 ?: DEFAULT_USER_TEMPLATES
             val updated = existing.filterNot { it == template }
             prefs[KEY_USER_TEMPLATES] = updated.joinToString("\u001E")
+        }
+    }
+
+    val downloadedTranslatorPacks: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] ?: emptySet()
+    }
+
+    suspend fun addDownloadedTranslatorPack(code: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] ?: emptySet()
+            prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] = current + code
+        }
+    }
+
+    suspend fun addDownloadedTranslatorPacks(codes: Set<String>) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] ?: emptySet()
+            prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] = current + codes
+        }
+    }
+
+    suspend fun removeDownloadedTranslatorPack(code: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] ?: emptySet()
+            prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] = current - code
         }
     }
 }

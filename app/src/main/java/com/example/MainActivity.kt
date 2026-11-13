@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
@@ -53,6 +54,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -91,6 +93,8 @@ import com.example.data.TypingStats
 import com.example.data.TypingStatsManager
 import com.example.model.LanguageId
 import com.example.model.SwipeSensitivity
+import com.example.ui.app.AboutAppScreen
+import com.example.ui.app.AppAboutMetadata
 import com.example.ui.app.AppearanceAndLayoutScreen
 import com.example.ui.app.BackendlessVerificationScreen
 import com.example.ui.app.GeneralSettingsScreen
@@ -171,6 +175,7 @@ fun MainScreen(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showBackendlessDetails by remember { mutableStateOf(false) }
+    var showAboutApp by remember { mutableStateOf(false) }
     val tabs = listOf(
         "Home" to Icons.Default.Keyboard,
         "Layout" to Icons.Default.Palette,
@@ -179,7 +184,11 @@ fun MainScreen(
         "Settings" to Icons.Default.Settings
     )
 
-    BackHandler(enabled = showBackendlessDetails) {
+    BackHandler(enabled = showAboutApp) {
+        showAboutApp = false
+    }
+
+    BackHandler(enabled = showBackendlessDetails && !showAboutApp) {
         showBackendlessDetails = false
     }
 
@@ -196,8 +205,12 @@ fun MainScreen(
                     ) {
                         tabs.forEachIndexed { index, (label, icon) ->
                             NavigationBarItem(
-                                selected = selectedTab == index,
-                                onClick = { selectedTab = index },
+                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails,
+                                onClick = {
+                                    selectedTab = index
+                                    showAboutApp = false
+                                    showBackendlessDetails = false
+                                },
                                 icon = { Icon(icon, contentDescription = label) },
                                 label = {
                                     Text(
@@ -234,8 +247,12 @@ fun MainScreen(
                     ) {
                         tabs.forEachIndexed { index, (label, icon) ->
                             NavigationRailItem(
-                                selected = selectedTab == index,
-                                onClick = { selectedTab = index },
+                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails,
+                                onClick = {
+                                    selectedTab = index
+                                    showAboutApp = false
+                                    showBackendlessDetails = false
+                                },
                                 icon = { Icon(icon, contentDescription = label) },
                                 label = { Text(label, fontSize = 11.sp) },
                                 colors = NavigationRailItemDefaults.colors(
@@ -254,7 +271,15 @@ fun MainScreen(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     Box(modifier = Modifier.fillMaxSize().widthIn(max = 1040.dp)) {
-                        if (showBackendlessDetails) {
+                        if (showAboutApp) {
+                            AboutAppScreen(
+                                onBack = { showAboutApp = false },
+                                onOpenBackendlessCheck = {
+                                    showAboutApp = false
+                                    showBackendlessDetails = true
+                                }
+                            )
+                        } else if (showBackendlessDetails) {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 TextButton(
                                     onClick = { showBackendlessDetails = false },
@@ -273,12 +298,16 @@ fun MainScreen(
                                     checkImeStatus = checkImeStatus,
                                     onNavigateToGestures = { selectedTab = 2 },
                                     onNavigateToLanguages = { selectedTab = 3 },
-                                    onNavigateToBackendless = { showBackendlessDetails = true }
+                                    onNavigateToBackendless = { showBackendlessDetails = true },
+                                    onNavigateToAbout = { showAboutApp = true }
                                 )
                                 1 -> AppearanceAndLayoutScreen(settingsManager = settingsManager)
                                 2 -> GestureSettingsScreen(settingsManager = settingsManager)
                                 3 -> LanguagesScreen(settingsManager = settingsManager)
-                                4 -> GeneralSettingsScreen(settingsManager = settingsManager)
+                                4 -> GeneralSettingsScreen(
+                                    settingsManager = settingsManager,
+                                    onNavigateToAbout = { showAboutApp = true }
+                                )
                             }
                         }
                     }
@@ -297,7 +326,8 @@ fun HomeScreen(
     checkImeStatus: () -> Pair<Boolean, Boolean>,
     onNavigateToGestures: () -> Unit,
     onNavigateToLanguages: () -> Unit,
-    onNavigateToBackendless: () -> Unit
+    onNavigateToBackendless: () -> Unit,
+    onNavigateToAbout: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var imeStatus by remember { mutableStateOf(Pair(false, false)) }
@@ -562,7 +592,17 @@ fun HomeScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("TypeGenius Keyboard", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("${LanguageId.entries.size} Languages (UniBijoy, Probhat & Sylheti) • AI", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                                Text("হাতের লেখা ফন্ট • ক্যালকুলেটর • স্মার্ট ক্লিপবোর্ড • অফলাইন অনুবাদ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("হাতের লেখা ফন্ট • ক্যালকুলেটর • অফলাইন অনুবাদ • ${AppAboutMetadata.COMPANY_NAME}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(
+                                onClick = onNavigateToAbout,
+                                modifier = Modifier.testTag("home_about_icon_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "About App & IT Amadersomaj Inc.",
+                                    tint = TGMagenta
+                                )
                             }
                         }
 
@@ -641,6 +681,46 @@ fun HomeScreen(
                         Text("${LanguageId.entries.size} languages, on-device translator, Room SQLite & DataStore — zero servers.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
+                }
+            }
+
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToAbout)
+                    .testTag("home_about_card")
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(TGMagenta.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Default.Business, contentDescription = "Company Info", tint = TGMagenta)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "About App & ${AppAboutMetadata.COMPANY_NAME}",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${AppAboutMetadata.APP_NAME} v${AppAboutMetadata.VERSION_NAME} • সকল ফিচার ও কোম্পানি পরিচিতি →",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(imageVector = Icons.Default.Info, contentDescription = "About Details", tint = TGMagenta)
                 }
             }
         }

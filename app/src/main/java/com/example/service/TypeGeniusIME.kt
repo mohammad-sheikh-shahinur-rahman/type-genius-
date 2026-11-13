@@ -294,6 +294,7 @@ class TypeGeniusIME : InputMethodService(),
                         currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
                     },
                     onCopy = { performSmartCopy() },
+                    onCut = { performSmartCut() },
                     onPaste = { performSmartPaste() },
                     onDeleteWordBackward = { deleteWordBackward() },
                     onUndoDelete = { undoLastDeletedWord() },
@@ -824,6 +825,45 @@ class TypeGeniusIME : InputMethodService(),
                 Toast.makeText(
                     this,
                     if (handled) "Copied" else "Select text first to copy",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun performSmartCut() {
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (isTranslatorOpen) {
+                if (translatorSourceText.isNotBlank()) {
+                    cm?.setPrimaryClip(ClipData.newPlainText("TypeGenius Cut", translatorSourceText))
+                    translatorSourceText = ""
+                    composingBuffer = ""
+                    translatorComposingPreview = ""
+                    isTypingActive = false
+                    updateTranslatorSuggestions()
+                    Toast.makeText(this, "Cut", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Nothing to cut", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+            val ic = currentInputConnection ?: return
+            if (composingBuffer.isNotEmpty()) commitComposing()
+            val selected = ic.getSelectedText(0)?.toString()
+            if (!selected.isNullOrEmpty()) {
+                cm?.setPrimaryClip(ClipData.newPlainText("TypeGenius Cut", selected))
+                ic.commitText("", 1)
+                updateAutoCapitalizeState()
+                updateSuggestions()
+                Toast.makeText(this, "Cut", Toast.LENGTH_SHORT).show()
+            } else {
+                val handled = ic.performContextMenuAction(android.R.id.cut)
+                updateAutoCapitalizeState()
+                updateSuggestions()
+                Toast.makeText(
+                    this,
+                    if (handled) "Cut" else "Select text first to cut",
                     Toast.LENGTH_SHORT
                 ).show()
             }

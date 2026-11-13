@@ -8,15 +8,18 @@ import com.example.data.dictionary.DictionaryManager
 import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.translator.OfflineTranslator
+import com.example.data.translator.TranslationPackManager
 import com.example.model.LanguageId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -150,5 +153,28 @@ class ExampleRobolectricTest {
 
         statsManager.resetStats()
         assertEquals(0, statsManager.statsFlow.first().totalWords)
+    }
+
+    @Test
+    fun `downloadable offline language pack installs to disk, translates locally, and removes cleanly`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsManager.getInstance(context)
+
+        val installRes = OfflineTranslator.downloadLanguagePack(context, "ta")
+        assertEquals("ta", installRes.langCode)
+        assertTrue("Expected installed Tamil pack entries", installRes.entryCount > 0)
+
+        val packFile = File(File(context.filesDir, "translation_packs"), "ta.json")
+        assertTrue("Expected persisted translation pack file on disk", packFile.exists())
+        assertTrue(settings.downloadedTranslatorPacks.first().contains("ta"))
+        assertTrue(TranslationPackManager.isPackReady(context, "ta", settings.downloadedTranslatorPacks.first()))
+
+        val taResult = OfflineTranslator.translateWithMemory(context, "Thank you", "en", "ta")
+        assertEquals("நன்றி", taResult.translatedText)
+        assertTrue(taResult.isOfflineExactOrPhrase)
+
+        OfflineTranslator.removeLanguagePack(context, "ta")
+        assertFalse("Expected pack file removed after delete", packFile.exists())
+        assertFalse(settings.downloadedTranslatorPacks.first().contains("ta"))
     }
 }

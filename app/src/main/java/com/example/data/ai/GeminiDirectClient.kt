@@ -1,6 +1,7 @@
 package com.example.data.ai
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -19,20 +20,38 @@ class GeminiDirectClient {
 
     private val preferredModels = listOf(
         "gemini-2.5-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
         "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-flash-latest",
         "gemini-flash-lite-latest"
     )
 
-    private fun sanitizeKey(key: String): String {
-        return key.trim()
-            .replace("\n", "")
-            .replace("\r", "")
-            .replace("\t", "")
-            .replace(" ", "")
-            .removeSurrounding("\"")
-            .removeSurrounding("'")
+    companion object {
+        private val RETRYABLE_HTTP_CODES = setOf(404, 429, 500, 502, 503, 504)
+
+        fun sanitizeKey(key: String): String {
+            return key.trim()
+                .replace("\n", "")
+                .replace("\r", "")
+                .replace("\t", "")
+                .replace(" ", "")
+                .removeSurrounding("\"")
+                .removeSurrounding("'")
+        }
+
+        fun isRetryableModelError(httpCode: Int, rawBody: String): Boolean {
+            if (httpCode in setOf(401, 403)) return false
+            if (httpCode in RETRYABLE_HTTP_CODES) return true
+            val lower = rawBody.lowercase()
+            return lower.contains("high demand") ||
+                lower.contains("overloaded") ||
+                lower.contains("unavailable") ||
+                lower.contains("resource_exhausted") ||
+                lower.contains("rate limit") ||
+                lower.contains("not found") ||
+                lower.contains("try again")
+        }
     }
 
     private fun buildCandidateModels(cleanKey: String): List<String> {
@@ -43,7 +62,7 @@ class GeminiDirectClient {
     private fun discoverFlashModels(cleanKey: String): List<String> {
         return runCatching {
             val req = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models?pageSize=50")
+                .url("https://generativelanguage.googleapis.com/v1beta/models?pageSize=60")
                 .header("x-goog-api-key", cleanKey)
                 .get()
                 .build()
@@ -61,11 +80,13 @@ class GeminiDirectClient {
                     }
                     if (supportsGen &&
                         name.contains("gemini") &&
-                        name.contains("flash") &&
+                        (name.contains("flash") || name.contains("pro")) &&
                         !name.contains("tts") &&
                         !name.contains("image") &&
                         !name.contains("live") &&
-                        !name.contains("audio")
+                        !name.contains("audio") &&
+                        !name.contains("vision") &&
+                        !name.contains("embedding")
                     ) {
                         result.add(name)
                     }
@@ -75,11 +96,26 @@ class GeminiDirectClient {
         }.getOrDefault(emptyList())
     }
 
+    suspend fun testConnection(apiKey: String): Result<String> {
+        return executeDirectPromptWithModel(
+            apiKey = apiKey,
+            prompt = "Respond with 'TypeGenius AI Ready' in 5 words or less."
+        ).map { (model, reply) -> "Connected ($model): $reply" }
+    }
+
     suspend fun executeDirectPrompt(
         apiKey: String,
         prompt: String,
         systemInstruction: String = "You are TypeGenius AI, a helpful keyboard assistant. Provide only the concise corrected/translated result without conversational filler or markdown quotes."
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<String> {
+        return executeDirectPromptWithModel(apiKey, prompt, systemInstruction).map { it.second }
+    }
+
+    private suspend fun executeDirectPromptWithModel(
+        apiKey: String,
+        prompt: String,
+        systemInstruction: String = "You are TypeGenius AI, a helpful keyboard assistant. Provide only the concise corrected/translated result without conversational filler or markdown quotes."
+    ): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
         val cleanKey = sanitizeKey(apiKey)
         if (cleanKey.isBlank()) {
             return@withContext Result.failure(
@@ -88,18 +124,22 @@ class GeminiDirectClient {
         }
 
         var lastError: Exception = Exception("Unable to reach Gemini API")
-        var triedModels = preferredModels
+        val triedSet = linkedSetOf<String>()
 
-        for (pass in 0..1) {
-            val modelsToTry = if (pass == 0) {
-                triedModels
-            } else {
-                val extra = buildCandidateModels(cleanKey).filterNot { it in triedModels }
-                if (extra.isEmpty()) break
-                extra
+        for (pass in 0..2) {
+            val modelsToTry = when (pass) {
+                0 -> preferredModels
+                1 -> buildCandidateModels(cleanKey).filterNot { it in triedSet }
+                else -> {
+                    // Brief cooldown pass on lightweight models in case all primary endpoints spiked momentarily
+                    delay(450)
+                    listOf("gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash")
+                }
             }
+            if (modelsToTry.isEmpty()) continue
 
             for (model in modelsToTry) {
+                triedSet.add(model)
                 try {
                     val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                     val jsonBody = JSONObject().apply {
@@ -118,21 +158,27 @@ class GeminiDirectClient {
                         .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                         .build()
 
+                    var shouldRetryNext = false
                     client.newCall(request).execute().use { response ->
                         val bodyStr = response.body?.string() ?: ""
                         if (!response.isSuccessful) {
                             val parsedMsg = parseGoogleError(response.code, bodyStr, model)
-                            if (response.code == 404) {
+                            if (isRetryableModelError(response.code, bodyStr)) {
                                 lastError = Exception(parsedMsg)
-                                return@use // try next model
+                                shouldRetryNext = true
+                                return@use
                             }
                             return@withContext Result.failure(Exception(parsedMsg))
                         }
                         val text = extractResponseText(bodyStr)
                         if (!text.isNullOrBlank()) {
-                            return@withContext Result.success(text.trim())
+                            return@withContext Result.success(model to text.trim())
                         }
-                        lastError = Exception("Empty response from Gemini")
+                        lastError = Exception("Empty response from Gemini ($model)")
+                        shouldRetryNext = true
+                    }
+                    if (shouldRetryNext) {
+                        delay(150)
                     }
                 } catch (e: Exception) {
                     lastError = e
@@ -154,17 +200,21 @@ class GeminiDirectClient {
             return@withContext Result.failure(IllegalStateException("No Gemini API key provided."))
         }
         var lastError: Exception = Exception("Unable to reach Gemini API")
+        val triedSet = linkedSetOf<String>()
 
-        for (pass in 0..1) {
-            val modelsToTry = if (pass == 0) {
-                preferredModels
-            } else {
-                val extra = buildCandidateModels(cleanKey).filterNot { it in preferredModels }
-                if (extra.isEmpty()) break
-                extra
+        for (pass in 0..2) {
+            val modelsToTry = when (pass) {
+                0 -> preferredModels
+                1 -> buildCandidateModels(cleanKey).filterNot { it in triedSet }
+                else -> {
+                    delay(450)
+                    listOf("gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash")
+                }
             }
+            if (modelsToTry.isEmpty()) continue
 
             for (model in modelsToTry) {
+                triedSet.add(model)
                 try {
                     val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
                     val genConfig = JSONObject()
@@ -183,13 +233,15 @@ class GeminiDirectClient {
                         .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
                         .build()
 
+                    var shouldRetryNext = false
                     client.newCall(request).execute().use { response ->
                         val rawBody = response.body?.string() ?: ""
                         if (!response.isSuccessful) {
                             val parsedMsg = parseGoogleError(response.code, rawBody, model)
-                            if (response.code == 404) {
+                            if (isRetryableModelError(response.code, rawBody)) {
                                 lastError = Exception(parsedMsg)
-                                return@use // try next model
+                                shouldRetryNext = true
+                                return@use
                             }
                             return@withContext Result.failure(Exception(parsedMsg))
                         }
@@ -198,7 +250,11 @@ class GeminiDirectClient {
                             val parsed = runCatching { JSONObject(text) }.getOrNull()
                             if (parsed != null) return@withContext Result.success(parsed)
                         }
-                        lastError = Exception("Could not parse structured Gemini response")
+                        lastError = Exception("Could not parse structured Gemini response ($model)")
+                        shouldRetryNext = true
+                    }
+                    if (shouldRetryNext) {
+                        delay(150)
                     }
                 } catch (e: Exception) {
                     lastError = e
@@ -220,6 +276,10 @@ class GeminiDirectClient {
                     "Permission denied (403): Generative Language API is disabled or region restricted for this key."
                 code == 404 ->
                     "Model $model unavailable (404)"
+                code == 503 || status == "UNAVAILABLE" ->
+                    "Gemini models are temporarily busy ($model • 503). All backup models were tried."
+                code == 429 || status == "RESOURCE_EXHAUSTED" ->
+                    "Quota/rate limit reached on $model (429)."
                 msg.isNotBlank() -> msg
                 else -> "HTTP $code: $rawBody"
             }

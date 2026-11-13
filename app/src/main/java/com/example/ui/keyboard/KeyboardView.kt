@@ -178,6 +178,7 @@ fun KeyboardView(
     onMoveToEnd: (select: Boolean) -> Unit,
     onSelectAll: () -> Unit,
     onCopy: () -> Unit,
+    onCut: () -> Unit = {},
     onPaste: () -> Unit,
     onDeleteWordBackward: () -> Unit = {},
     onUndoDelete: () -> Unit = {},
@@ -651,6 +652,7 @@ fun KeyboardView(
                         onMoveToEnd = onMoveToEnd,
                         onSelectAll = onSelectAll,
                         onCopy = onCopy,
+                        onCut = onCut,
                         onPaste = onPaste,
                         onBackspace = { onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE)) },
                         onHaptic = { haptic() }

@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.data.KeyboardFontPreset
+import com.example.data.ai.GeminiDirectClient
 import com.example.data.ai.TypeGeniusAiAction
 import com.example.data.ai.TypeGeniusAiEngine
 import com.example.data.dictionary.BigramPredictionEngine
@@ -14,12 +15,14 @@ import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.SmartClipType
 import com.example.data.local.SmartClipboardParser
 import com.example.data.phonetic.BengaliPhoneticParser
+import com.example.data.translator.LocalTranslationGrammar
 import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardTheme
 import com.example.model.KeyboardToolId
 import com.example.model.LanguageId
 import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
+import com.example.ui.app.AppAboutMetadata
 import com.example.ui.keyboard.KeyboardLayouts
 import com.example.ui.keyboard.KeyboardThemeData
 import com.example.ui.keyboard.MiniCalcEvaluator
@@ -613,5 +616,42 @@ class ExampleUnitTest {
         assertEquals("42", MiniCalcEvaluator.evaluateExpression("6*7"))
         assertEquals("15", MiniCalcEvaluator.evaluateExpression("(10+20)÷2"))
         assertEquals("1210", MiniCalcEvaluator.formatNumber(MiniCalcEvaluator.conversionPresets.first { it.id == "usd_bdt" }.convert(10.0)))
+    }
+
+    @Test
+    fun testGeminiDirectClient_retryableErrorsAndKeySanitization() {
+        assertTrue(GeminiDirectClient.isRetryableModelError(503, ""))
+        assertTrue(GeminiDirectClient.isRetryableModelError(429, ""))
+        assertTrue(GeminiDirectClient.isRetryableModelError(404, ""))
+        assertTrue(
+            GeminiDirectClient.isRetryableModelError(
+                200,
+                """{"error":{"message":"This model is currently experiencing high demand."}}"""
+            )
+        )
+        assertFalse(GeminiDirectClient.isRetryableModelError(401, "UNAUTHENTICATED"))
+        assertFalse(GeminiDirectClient.isRetryableModelError(403, "PERMISSION_DENIED"))
+
+        assertEquals(
+            "AIzaSyTestKey123",
+            GeminiDirectClient.sanitizeKey("  \"AIzaSyTest\nKey 123\" ")
+        )
+    }
+
+    @Test
+    fun testExpandedOfflineTranslator_38LanguagesAndAboutCompanyMetadata() {
+        assertEquals(38, OfflineTranslator.supportedLanguages.size)
+        assertEquals(22, OfflineTranslator.supportedLanguages.count { it.isBundledCore })
+        assertEquals(16, OfflineTranslator.supportedLanguages.count { !it.isBundledCore })
+
+        assertEquals("ta", LocalTranslationGrammar.detectLikelyLanguageCode("நன்றி"))
+        assertEquals("th", LocalTranslationGrammar.detectLikelyLanguageCode("สวัสดี"))
+        assertEquals("he", LocalTranslationGrammar.detectLikelyLanguageCode("שלום"))
+        assertEquals("te", LocalTranslationGrammar.detectLikelyLanguageCode("ధన్యవాదాలు"))
+        assertEquals("uk", LocalTranslationGrammar.detectLikelyLanguageCode("Привіт"))
+
+        assertEquals("IT Amadersomaj Inc.", AppAboutMetadata.COMPANY_NAME)
+        assertEquals("TypeGenius Keyboard", AppAboutMetadata.APP_NAME)
+        assertEquals("com.itamadersomajinc.typegenius", AppAboutMetadata.PACKAGE_ID)
     }
 }
