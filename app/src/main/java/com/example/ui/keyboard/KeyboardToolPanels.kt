@@ -30,10 +30,12 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -439,6 +441,20 @@ fun MoreToolsPanel(
             icon = Icons.Default.Translate,
             testTag = "tool_translate",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TRANSLATOR) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.CALCULATOR,
+            label = "Calculator",
+            icon = Icons.Default.Calculate,
+            testTag = "tool_calculator",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.CALCULATOR) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.UTILITIES,
+            label = "Notes & Date",
+            icon = Icons.Default.EventNote,
+            testTag = "tool_utilities",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.UTILITIES) }
         ),
         ToolTile(
             id = KeyboardToolId.THEMES,

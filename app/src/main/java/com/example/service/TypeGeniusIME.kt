@@ -30,7 +30,9 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
 import com.example.data.SettingsManager
+import com.example.data.TypingStatsManager
 import com.example.data.ai.TypeGeniusAiEngine
+import com.example.data.dictionary.BigramPredictionEngine
 import com.example.data.dictionary.DictionaryManager
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.GrammarSuggestion
@@ -39,6 +41,8 @@ import com.example.data.dictionary.OfflineGrammarEngine
 import com.example.data.dictionary.OfflineMathEvaluator
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.ClipboardItem
+import com.example.data.local.SmartClipInfo
+import com.example.data.local.SmartClipboardParser
 import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.phonetic.BengaliPhoneticParser
@@ -76,7 +80,11 @@ class TypeGeniusIME : InputMethodService(),
     private lateinit var shortcutRepository: TextShortcutRepository
     private lateinit var database: TypeGeniusDatabase
     private lateinit var voiceInputController: VoiceInputController
+    private lateinit var keySoundEngine: KeySoundEngine
+    private lateinit var statsManager: TypingStatsManager
     private var audioManager: AudioManager? = null
+    private var lastWordCommitTimeMs: Long = 0L
+    private var smartClipSuggestion by mutableStateOf<SmartClipInfo?>(null)
 
     private var activeLanguage by mutableStateOf(LanguageId.BANGLA_PROBHAT)
     private var enabledLanguages by mutableStateOf(
@@ -132,6 +140,8 @@ class TypeGeniusIME : InputMethodService(),
         shortcutRepository = TextShortcutRepository(this)
         database = TypeGeniusDatabase.getDatabase(this)
         voiceInputController = VoiceInputController(this)
+        keySoundEngine = KeySoundEngine(this)
+        statsManager = TypingStatsManager.getInstance(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
         serviceScope.launch {
@@ -171,6 +181,8 @@ class TypeGeniusIME : InputMethodService(),
                 if (clip != null && clip.itemCount > 0) {
                     val text = clip.getItemAt(0).text?.toString()
                     if (!text.isNullOrBlank()) {
+                        val parsed = SmartClipboardParser.classify(text)
+                        smartClipSuggestion = if (SmartClipboardParser.isHighPrioritySmartClip(parsed)) parsed else null
                         serviceScope.launch(Dispatchers.IO) {
                             database.clipboardDao().insert(
                                 ClipboardItem(content = text, timestamp = System.currentTimeMillis())
@@ -299,6 +311,17 @@ class TypeGeniusIME : InputMethodService(),
                     aiSourceText = aiSourceSnapshot,
                     canUndoAiEdit = lastAiOriginalText.isNotEmpty() && lastAiReplacedText.isNotEmpty(),
                     liveGrammarIssueCount = liveGrammarIssueCount,
+                    smartClipSuggestion = smartClipSuggestion,
+                    onSmartClipClick = { info ->
+                        if (isTranslatorOpen) {
+                            translatorSourceText += info.extractedValue
+                        } else {
+                            currentInputConnection?.commitText(info.extractedValue, 1)
+                        }
+                        smartClipSuggestion = null
+                        updateSuggestions()
+                    },
+                    onDismissSmartClip = { smartClipSuggestion = null },
                     onRefreshAiSourceText = { readFieldTextForAi() },
                     onApplyAiText = { newText -> applyAiReplacement(newText) },
                     onUndoAiText = { undoAiReplacement() },
@@ -351,6 +374,7 @@ class TypeGeniusIME : InputMethodService(),
         store.clear()
         serviceScope.cancel()
         voiceInputController.destroy()
+        keySoundEngine.release()
 
         try {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -360,33 +384,25 @@ class TypeGeniusIME : InputMethodService(),
 
     private fun playKeyClickSound(keyType: KeyType) {
         if (!soundEnabled) return
-        val am = audioManager ?: return
-        val vol = soundProfile.volume
-        val effect = when (soundProfile) {
-            SoundProfile.TYPEWRITER -> when (keyType) {
-                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
-                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
-                KeyType.BACKSPACE -> AudioManager.FX_KEYPRESS_DELETE
-                else -> AudioManager.FX_KEYPRESS_STANDARD
-            }
-            SoundProfile.MECHANICAL -> when (keyType) {
-                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
-                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
-                else -> AudioManager.FX_KEYPRESS_DELETE
-            }
-            SoundProfile.THOCK -> when (keyType) {
-                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
-                else -> AudioManager.FX_KEYPRESS_STANDARD
-            }
-            SoundProfile.POPPY -> AudioManager.FX_KEY_CLICK
-            SoundProfile.SYSTEM -> when (keyType) {
-                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
-                KeyType.BACKSPACE -> AudioManager.FX_KEYPRESS_DELETE
-                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
-                else -> AudioManager.FX_KEYPRESS_STANDARD
+        keySoundEngine.play(soundProfile, keyType)
+    }
+
+    private fun recordCommittedWordMetrics(word: String, textBeforeWord: String = "") {
+        val clean = word.trim()
+        if (clean.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val elapsed = if (lastWordCommitTimeMs > 0L) (now - lastWordCommitTimeMs) else 1200L
+        lastWordCommitTimeMs = now
+
+        val prev = textBeforeWord.trimEnd().takeLastWhile { !it.isWhitespace() }
+        if (prev.isNotBlank()) {
+            BigramPredictionEngine.learnPair(prev, clean)
+        }
+        if (!isIncognitoEnabled) {
+            serviceScope.launch {
+                statsManager.recordCommittedWord(clean, activeLanguage, elapsed)
             }
         }
-        am.playSoundEffect(effect, vol)
     }
 
     private fun handleKeyAction(action: KeyAction) {
@@ -449,6 +465,7 @@ class TypeGeniusIME : InputMethodService(),
             }
 
             KeyType.SPACEBAR -> {
+                val contextBeforeSpace = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
                 if (composingBuffer.isNotEmpty()) {
                     val topCandidate = suggestions.firstOrNull { !it.startsWith("✓ ") } ?: composingBuffer
                     val toCommit = if (activeFancyStyle != FancyFontStyle.NORMAL) {
@@ -456,6 +473,7 @@ class TypeGeniusIME : InputMethodService(),
                     } else topCandidate
                     ic.commitText(toCommit, 1)
                     lastTypedWordPreview = topCandidate
+                    recordCommittedWordMetrics(topCandidate, contextBeforeSpace)
                     if (!isIncognitoEnabled) {
                         serviceScope.launch {
                             dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
@@ -463,8 +481,7 @@ class TypeGeniusIME : InputMethodService(),
                     }
                     composingBuffer = ""
                 } else {
-                    val before = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
-                    val token = before.takeLastWhile { !it.isWhitespace() }
+                    val token = contextBeforeSpace.takeLastWhile { !it.isWhitespace() }
                     if (token.isNotEmpty()) {
                         val plainToken = UnicodeTextStyler.unstyleToPlain(token)
                         val autoFixed = if (spellCheckEnabled && token == plainToken) {
@@ -472,6 +489,8 @@ class TypeGeniusIME : InputMethodService(),
                         } else null
                         val wordToKeep = autoFixed ?: plainToken
                         lastTypedWordPreview = wordToKeep
+                        val priorContext = contextBeforeSpace.dropLast(token.length)
+                        recordCommittedWordMetrics(wordToKeep, priorContext)
 
                         if (autoFixed != null && autoFixed != token) {
                             val styledFixed = if (activeFancyStyle != FancyFontStyle.NORMAL) {
@@ -930,6 +949,8 @@ class TypeGeniusIME : InputMethodService(),
             } else topCandidate
             ic.commitText(toCommit, 1)
             lastTypedWordPreview = topCandidate
+            val priorText = ic.getTextBeforeCursor(40, 0)?.toString() ?: ""
+            recordCommittedWordMetrics(topCandidate, priorText.dropLast(toCommit.length.coerceAtMost(priorText.length)))
             if (!isIncognitoEnabled) {
                 serviceScope.launch {
                     dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
@@ -1013,6 +1034,8 @@ class TypeGeniusIME : InputMethodService(),
         lastTypedWordPreview = commitValue
         lastGlideCommittedWord = ""
         isTypingActive = false
+        val contextForBigram = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
+        recordCommittedWordMetrics(commitValue, contextForBigram.dropLast((styledCandidate.length + 1).coerceAtMost(contextForBigram.length)))
         if (!isIncognitoEnabled) {
             serviceScope.launch {
                 dictionaryManager.recordWordUsed(commitValue, activeLanguage)
@@ -1119,7 +1142,9 @@ class TypeGeniusIME : InputMethodService(),
                     ic.finishComposingText()
                     composingBuffer = ""
                 }
+                val priorText = ic.getTextBeforeCursor(40, 0)?.toString() ?: ""
                 ic.commitText("$topStyled ", 1)
+                recordCommittedWordMetrics(rawTop, priorText)
                 suggestions = candidates
                 updateAutoCapitalizeState()
             }
@@ -1361,6 +1386,13 @@ class TypeGeniusIME : InputMethodService(),
                     TypeGeniusAiEngine.collectLocalCorrections(plainContext, activeLanguage).size
                 } else 0
 
+                val prevWord = if (lastWord.isEmpty()) {
+                    BigramPredictionEngine.extractPreviousWordBeforeCursor(plainContext)
+                } else ""
+                val bigramPreds = if (prevWord.isNotEmpty()) {
+                    BigramPredictionEngine.predictNextWords(prevWord, activeLanguage, limit = 4)
+                } else emptyList()
+
                 val dictPreds = dictionaryManager.getPredictions(
                     input = UnicodeTextStyler.unstyleToPlain(lastWord),
                     languageId = activeLanguage,
@@ -1375,6 +1407,7 @@ class TypeGeniusIME : InputMethodService(),
                         add(it.equationString)
                     }
                     addAll(grammarFixes.map { it.displayLabel })
+                    addAll(bigramPreds)
                     addAll(predictedEmojis)
                     addAll(shortcutMatches)
                     addAll(dictPreds)
@@ -1402,7 +1435,7 @@ class TypeGeniusIME : InputMethodService(),
                 type = "text/plain"
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "Check out TypeGenius Keyboard — 100% offline & backendless keyboard with Bengali Probhat, Sylheti, 32 languages, and Material You dynamic themes!"
+                    "Check out TypeGenius Keyboard — 100% offline & backendless keyboard with Bengali Probhat, UniBijoy, Avro, Sylheti, ${LanguageId.entries.size} languages, and Material You themes!"
                 )
             }
             val chooser = Intent.createChooser(sendIntent, "Share TypeGenius Keyboard").apply {

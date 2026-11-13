@@ -44,9 +44,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Palette
@@ -112,6 +114,7 @@ import com.example.data.SettingsManager
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.ClipboardItem
+import com.example.data.local.SmartClipInfo
 import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardHeightPreset
@@ -185,6 +188,9 @@ fun KeyboardView(
     aiSourceText: String = "",
     canUndoAiEdit: Boolean = false,
     liveGrammarIssueCount: Int = 0,
+    smartClipSuggestion: SmartClipInfo? = null,
+    onSmartClipClick: (SmartClipInfo) -> Unit = {},
+    onDismissSmartClip: () -> Unit = {},
     onRefreshAiSourceText: () -> String = { "" },
     onApplyAiText: (String) -> Unit = {},
     onUndoAiText: () -> Unit = {},
@@ -227,6 +233,10 @@ fun KeyboardView(
     val toolbarTools by settingsManager.toolbarTools.collectAsState(initial = KeyboardToolId.DEFAULT_TOOLBAR)
     val keyboardFontId by settingsManager.keyboardFontId.collectAsState(initial = KeyboardFontPreset.ATMA_HANDWRITING.id)
     val customFontPath by settingsManager.customFontPath.collectAsState(initial = "")
+    val customFontName by settingsManager.customFontName.collectAsState(initial = "")
+    val customAiPrompts by settingsManager.customAiPrompts.collectAsState(initial = emptyList())
+    val notepadDraft by settingsManager.notepadDraft.collectAsState(initial = "")
+    val userTemplates by settingsManager.userTemplates.collectAsState(initial = SettingsManager.DEFAULT_USER_TEMPLATES)
     val activeKeyboardFontFamily = remember(keyboardFontId, customFontPath) {
         CustomFontManager.getFontFamily(context, keyboardFontId, customFontPath)
     }
@@ -479,10 +489,13 @@ fun KeyboardView(
                 heightPreset = heightPreset,
                 liveGrammarIssueCount = liveGrammarIssueCount,
                 canUndoDelete = canUndoDelete,
+                smartClipSuggestion = smartClipSuggestion,
                 activeFancyStyle = activeFancyStyle,
                 draggingTool = draggingTool,
                 isDragTargetActive = isOverTopBar,
                 voiceController = voiceController,
+                onSmartClipClick = onSmartClipClick,
+                onDismissSmartClip = onDismissSmartClip,
                 onTopBarBoundsChanged = { topBarBoundsInRoot = it },
                 onToolItemBoundsChanged = { tool, rect -> topBarItemBounds[tool] = rect },
                 onStartToolDrag = { tool, startRootPos ->
@@ -668,6 +681,7 @@ fun KeyboardView(
                         LanguageId.BANGLA_PROBHAT,
                         LanguageId.BANGLA_PHONETIC,
                         LanguageId.BANGLA_NATIONAL,
+                        LanguageId.BANGLA_UNIBIJOY,
                         LanguageId.SYLHETI,
                         LanguageId.ASSAMESE
                     )
@@ -691,10 +705,47 @@ fun KeyboardView(
                         geminiApiKey = geminiApiKey,
                         sourceText = aiSourceText,
                         canUndo = canUndoAiEdit,
+                        customAiPrompts = customAiPrompts,
                         onRefreshSourceText = onRefreshAiSourceText,
                         onApplyText = onApplyAiText,
                         onUndo = onUndoAiText,
                         onOpenSettings = onOpenSettings,
+                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onHaptic = { haptic() }
+                    )
+                }
+
+                KeyboardViewMode.CALCULATOR -> {
+                    CalculatorAndConverterPanel(
+                        colors = colors,
+                        onInsertResult = { res ->
+                            onInsertTextSnippet(res)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
+                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onHaptic = { haptic() }
+                    )
+                }
+
+                KeyboardViewMode.UTILITIES -> {
+                    QuickToolsNotepadPanel(
+                        colors = colors,
+                        notepadDraft = notepadDraft,
+                        userTemplates = userTemplates,
+                        onInsertSnippet = { snippet ->
+                            onInsertTextSnippet(snippet)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
+                        onSaveNotepadDraft = { draft ->
+                            coroutineScope.launch { settingsManager.setNotepadDraft(draft) }
+                        },
+                        onAddTemplate = { tmpl ->
+                            coroutineScope.launch { settingsManager.addUserTemplate(tmpl) }
+                        },
+                        onRemoveTemplate = { tmpl ->
+                            coroutineScope.launch { settingsManager.removeUserTemplate(tmpl) }
+                        },
+                        onGetFieldTextForTts = onRefreshAiSourceText,
                         onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
                         onHaptic = { haptic() }
                     )
@@ -990,6 +1041,7 @@ fun KeyboardView(
                             LanguageId.BANGLA_PROBHAT,
                             LanguageId.BANGLA_PHONETIC,
                             LanguageId.BANGLA_NATIONAL,
+                            LanguageId.BANGLA_UNIBIJOY,
                             LanguageId.SYLHETI,
                             LanguageId.ASSAMESE
                         )
@@ -1115,7 +1167,7 @@ fun KeyboardView(
 
                         val punctuationChar = when (activeLanguage) {
                             LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL,
-                            LanguageId.SYLHETI, LanguageId.ASSAMESE,
+                            LanguageId.BANGLA_UNIBIJOY, LanguageId.SYLHETI, LanguageId.ASSAMESE,
                             LanguageId.HINDI, LanguageId.NEPALI, LanguageId.MARATHI, LanguageId.SANSKRIT -> "।"
                             else -> "."
                         }
@@ -1238,9 +1290,22 @@ fun KeyboardView(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column {
-                                        Text(lang.nativeName, color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                        Text(lang.displayName, color = colors.textSecondary, fontSize = 11.sp)
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(lang.nativeName, color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            if (lang.isRtl) {
+                                                Text(
+                                                    text = "RTL",
+                                                    color = colors.accent,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                        Text("${lang.displayName} • ${lang.scriptLabel}", color = colors.textSecondary, fontSize = 11.sp)
                                     }
                                     if (isSelected) {
                                         Icon(Icons.Default.Check, contentDescription = "Active", tint = colors.accent)
@@ -1338,6 +1403,8 @@ private fun toolIconForGhost(tool: KeyboardToolId) = when (tool) {
     KeyboardToolId.GIF -> Icons.Default.Gif
     KeyboardToolId.CLIPBOARD -> Icons.Default.ContentPaste
     KeyboardToolId.TRANSLATOR -> Icons.Default.Translate
+    KeyboardToolId.CALCULATOR -> Icons.Default.Calculate
+    KeyboardToolId.UTILITIES -> Icons.Default.EventNote
     KeyboardToolId.FANCY_FONTS -> Icons.Default.TextFormat
     KeyboardToolId.THEMES -> Icons.Default.Palette
     KeyboardToolId.INCOGNITO -> Icons.Default.VisibilityOff

@@ -64,6 +64,7 @@ fun TypeGeniusAiPanel(
     geminiApiKey: String,
     sourceText: String,
     canUndo: Boolean,
+    customAiPrompts: List<Pair<String, String>> = emptyList(),
     onRefreshSourceText: () -> String,
     onApplyText: (String) -> Unit,
     onUndo: () -> Unit,
@@ -79,14 +80,17 @@ fun TypeGeniusAiPanel(
     var isLoading by remember { mutableStateOf(false) }
     val skippedIndices = remember { mutableStateListOf<Int>() }
     val previousVariations = remember { mutableStateListOf<String>() }
-    val quickPrompts = listOf(
+    val builtInPrompts = listOf(
         "মিষ্টি করে লেখো" to "মিষ্টি ও আন্তরিক ভাষায় সুন্দর করে লেখো",
         "অফিসিয়াল দরখাস্ত" to "ফরমাল ও মার্জিত অফিসিয়াল ভাষায় সাজিয়ে লেখো",
         "সংক্ষেপ করো" to "সংক্ষেপে মূল ভাব ঠিক রেখে এক লাইনে লেখো",
         "ইংরেজি অনুবাদ" to "ফ্লুয়েন্ট ন্যাচারাল ইংরেজিতে প্রকাশ করো",
         "ভাইরাল ক্যাপশন" to "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন ও ইমোজি দিয়ে সাজাও"
     )
-    var customPromptText by remember { mutableStateOf(quickPrompts.first().second) }
+    val quickPrompts = remember(customAiPrompts) {
+        (customAiPrompts + builtInPrompts).distinctBy { it.first }
+    }
+    var customPromptText by remember(quickPrompts) { mutableStateOf(quickPrompts.first().second) }
 
     fun execute(action: TypeGeniusAiAction, isVariation: Boolean = false, prompt: String = "") {
         val latest = onRefreshSourceText().ifBlank { currentSource }

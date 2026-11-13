@@ -55,6 +55,8 @@ fun ToolbarCustomizerCard(settingsManager: SettingsManager) {
         KeyboardToolId.EMOJI to "ইমোজি ও জিআইএফ (Emoji)",
         KeyboardToolId.CLIPBOARD to "ক্লিপবোর্ড হিস্ট্রি (Clipboard)",
         KeyboardToolId.TRANSLATOR to "অফলাইন ট্রান্সলেটর (Translate)",
+        KeyboardToolId.CALCULATOR to "ক্যালকুলেটর ও কনভার্টার (Calc)",
+        KeyboardToolId.UTILITIES to "নোটপ্যাড, তারিখ ও TTS (Notes)",
         KeyboardToolId.FANCY_FONTS to "স্টাইলিশ ফন্ট (Fancy Fonts)",
         KeyboardToolId.THEMES to "থিমস (Themes)",
         KeyboardToolId.INCOGNITO to "প্রাইভেট ইনকগনিটো (Incognito)",

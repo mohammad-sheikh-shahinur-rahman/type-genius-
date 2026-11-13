@@ -87,6 +87,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.SettingsManager
+import com.example.data.TypingStats
+import com.example.data.TypingStatsManager
 import com.example.model.LanguageId
 import com.example.model.SwipeSensitivity
 import com.example.ui.app.AppearanceAndLayoutScreen
@@ -449,7 +451,7 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Active: ${activeLang.displayName}",
+                            text = "Active: ${activeLang.nativeName}",
                             fontSize = 11.sp,
                             color = TGMagenta,
                             fontWeight = FontWeight.SemiBold,
@@ -559,8 +561,8 @@ fun HomeScreen(
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("TypeGenius Keyboard", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("32 Languages (incl. Sylheti) • TypeGenius AI", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                                Text("হাতের লেখা ফন্ট • কন্টিনিউয়াস ভয়েস • লং-প্রেস কপি/পেস্ট", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${LanguageId.entries.size} Languages (UniBijoy, Probhat & Sylheti) • AI", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text("হাতের লেখা ফন্ট • ক্যালকুলেটর • স্মার্ট ক্লিপবোর্ড • অফলাইন অনুবাদ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
 
@@ -569,7 +571,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("হাতের লেখা ফন্ট", "Auto ∞ Voice", "C = Copy / V = Paste", "Offline Translator").forEach { tag ->
+                            listOf("ইউনিবিজয় ও অভ্র", "Auto ∞ Voice", "OTP স্মার্ট পেস্ট", "Calculator & Notes").forEach { tag ->
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
@@ -592,6 +594,7 @@ fun HomeScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ActivationCard()
+                        TypingStatsCard()
                         HandwritingFontSettingsCard(settingsManager = settingsManager)
                         SpacebarSandboxCard()
                     }
@@ -603,6 +606,7 @@ fun HomeScreen(
                 }
             } else {
                 ActivationCard()
+                TypingStatsCard()
                 TypingPlaygroundCard()
                 HandwritingFontSettingsCard(settingsManager = settingsManager)
                 OfflineTranslatorCard(settingsManager = settingsManager)
@@ -685,5 +689,122 @@ private fun ActivationStepRow(
         ) {
             Text(buttonText, fontSize = 12.sp)
         }
+    }
+}
+
+@Composable
+fun TypingStatsCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val statsManager = remember { TypingStatsManager.getInstance(context) }
+    val stats by statsManager.statsFlow.collectAsState(initial = TypingStats())
+
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("typing_stats_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "অফলাইন টাইপিং পরিসংখ্যান (Typing Stats)",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "১০০% লোকাল — ডিভাইসের ভেতরেই গতি ও ভাষার হিসাব",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (stats.totalWords > 0) {
+                    TextButton(
+                        onClick = { scope.launch { statsManager.resetStats() } },
+                        modifier = Modifier.testTag("reset_typing_stats_button")
+                    ) {
+                        Text("রিসেট", color = TGMagenta, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatTile(
+                    label = "গড় গতি (WPM)",
+                    value = "${stats.averageWpm}",
+                    sub = "Peak ${stats.peakWpm}",
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    label = "মোট শব্দ",
+                    value = "${stats.totalWords}",
+                    sub = "${stats.totalChars} অক্ষর",
+                    modifier = Modifier.weight(1f)
+                )
+                StatTile(
+                    label = "বাংলা / English",
+                    value = "${stats.banglaPercent}% / ${stats.englishPercent}%",
+                    sub = "${stats.banglaWords} bn • ${stats.englishWords} en",
+                    modifier = Modifier.weight(1.15f)
+                )
+            }
+
+            // Visual split bar
+            if (stats.banglaWords + stats.englishWords > 0) {
+                val bnWeight = stats.banglaPercent.coerceAtLeast(1) / 100f
+                val enWeight = (1f - bnWeight).coerceAtLeast(0.01f)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(bnWeight)
+                            .fillMaxHeight()
+                            .background(TGMagenta)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(enWeight)
+                            .fillMaxHeight()
+                            .background(TGViolet.copy(alpha = 0.7f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatTile(
+    label: String,
+    value: String,
+    sub: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = TGMagenta, maxLines = 1)
+        Text(sub, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }

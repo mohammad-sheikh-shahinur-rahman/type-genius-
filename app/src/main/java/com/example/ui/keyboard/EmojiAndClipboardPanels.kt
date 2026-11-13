@@ -42,7 +42,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.platform.testTag
 import com.example.data.local.ClipboardItem
+import com.example.data.local.SmartClipType
+import com.example.data.local.SmartClipboardParser
 
 @Composable
 fun EmojiPanel(
@@ -183,23 +188,36 @@ fun ClipboardPanel(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var filterIndex by remember { mutableIntStateOf(0) } // 0=All, 1=OTP, 2=Links, 3=Pinned
+    val classified = remember(items) {
+        items.map { it to SmartClipboardParser.classify(it.content) }
+    }
+    val filtered = remember(classified, filterIndex) {
+        when (filterIndex) {
+            1 -> classified.filter { it.second.type == SmartClipType.OTP }
+            2 -> classified.filter { it.second.type == SmartClipType.LINK }
+            3 -> classified.filter { it.first.isPinned }
+            else -> classified
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(260.dp)
+            .height(262.dp)
             .background(colors.background)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(42.dp)
+                .height(40.dp)
                 .background(colors.suggestionBackground)
                 .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Clipboard History (Local & Pinned)",
+                text = "Smart Clipboard History",
                 color = colors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
@@ -224,7 +242,35 @@ fun ClipboardPanel(
             }
         }
 
-        if (items.isEmpty()) {
+        // Category Filter Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf("All" to 0, "🔑 OTP" to 1, "🔗 Links" to 2, "📌 Pinned" to 3).forEach { (label, idx) ->
+                val selected = filterIndex == idx
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) colors.accent else colors.keySpecialBackground)
+                        .clickable { filterIndex = idx }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .testTag("clipboard_filter_$idx")
+                ) {
+                    Text(
+                        text = label,
+                        color = if (selected) Color.White else colors.textPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        if (filtered.isEmpty()) {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -232,7 +278,11 @@ fun ClipboardPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Clipboard is empty\nCopied text appears here locally",
+                    text = if (items.isEmpty()) {
+                        "Clipboard is empty\nCopied OTPs, links & text appear here locally"
+                    } else {
+                        "No items match this filter"
+                    },
                     color = colors.textSecondary,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -243,10 +293,10 @@ fun ClipboardPanel(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(items, key = { it.id }) { item ->
+                items(filtered, key = { it.first.id }) { (item, clipInfo) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -264,14 +314,43 @@ fun ClipboardPanel(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = item.content,
-                            color = colors.textPrimary,
-                            fontSize = 13.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            if (clipInfo.type != SmartClipType.TEXT) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(colors.accent.copy(alpha = 0.18f))
+                                            .clickable { onItemSelected(clipInfo.extractedValue) }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (clipInfo.type == SmartClipType.OTP) {
+                                                "Paste OTP ${clipInfo.extractedValue}"
+                                            } else {
+                                                clipInfo.badgeLabel
+                                            },
+                                            color = colors.accent,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = item.content,
+                                color = colors.textPrimary,
+                                fontSize = 13.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = { onTogglePin(item) },

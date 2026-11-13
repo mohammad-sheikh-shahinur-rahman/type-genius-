@@ -21,7 +21,7 @@ object KeyboardLayouts {
 
     fun getNumberRow(language: LanguageId): List<KeyAction> {
         return when (language) {
-            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.SYLHETI, LanguageId.ASSAMESE ->
+            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.BANGLA_UNIBIJOY, LanguageId.SYLHETI, LanguageId.ASSAMESE ->
                 listOf("১" to "1", "২" to "2", "৩" to "3", "৪" to "4", "৫" to "5", "৬" to "6", "৭" to "7", "৮" to "8", "৯" to "9", "০" to "0")
                     .map { (bn, en) -> KeyAction(bn, en, KeyType.CHARACTER) }
             LanguageId.HINDI, LanguageId.NEPALI, LanguageId.MARATHI, LanguageId.SANSKRIT ->
@@ -38,6 +38,7 @@ object KeyboardLayouts {
         return when (language) {
             LanguageId.BANGLA_PROBHAT -> getBengaliProbhatRows(isShifted)
             LanguageId.BANGLA_NATIONAL -> getBengaliNationalRows(isShifted)
+            LanguageId.BANGLA_UNIBIJOY -> getBengaliUnibijoyRows(isShifted)
             LanguageId.SYLHETI -> getSylhetiRows(isShifted)
             LanguageId.ASSAMESE -> getAssameseRows(isShifted)
             LanguageId.BANGLA_PHONETIC, LanguageId.ENGLISH, LanguageId.ENGLISH_UK,
@@ -180,6 +181,15 @@ object KeyboardLayouts {
         r3 = listOf("ং" to "ৎ", "্" to "ঃ", "ম" to "ঁ", "ন" to "ণ", "স" to "ষ", "ল" to "শ", "ফ" to "ঞ", "ৃ" to "\u09CD\u09B0", "ৈ" to "ৌ"),
         isShifted = isShifted,
         shiftWeight = 1.25f
+    )
+
+    // UniBijoy classic mobile-adapted layout: full vowels, kars, consonants, pholas, signs
+    private fun getBengaliUnibijoyRows(isShifted: Boolean) = buildBengaliPairedLayout(
+        r1 = listOf("ং" to "ঙ", "য়" to "য", "ড" to "ঢ", "প" to "ফ", "ট" to "ঠ", "চ" to "ছ", "জ" to "ঝ", "হ" to "ঞ", "ো" to "ৌ", "ৃ" to "\u09CD\u09B0"),
+        r2 = listOf("া" to "অ", "ু" to "উ", "ি" to "ই", "র" to "ড়", "্" to "আ", "ত" to "থ", "ক" to "খ", "ল" to "ঃ", "ে" to "ঐ", "এ" to "ও"),
+        r3 = listOf("ঁ" to "ঢ়", "স" to "ষ", "দ" to "ধ", "ন" to "ণ", "ব" to "ভ", "ম" to "শ", "গ" to "ঘ", "ী" to "ঈ", "ূ" to "ঊ", "ৈ" to "ঔ", "ঋ" to "ৎ"),
+        isShifted = isShifted,
+        shiftWeight = 1.2f
     )
 
     private fun getLatinQwertyRows(
@@ -372,7 +382,7 @@ object KeyboardLayouts {
 
     fun getSymbols1(language: LanguageId): List<List<KeyAction>> {
         val isBengaliFamily = language in listOf(
-            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.SYLHETI, LanguageId.ASSAMESE
+            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.BANGLA_UNIBIJOY, LanguageId.SYLHETI, LanguageId.ASSAMESE
         )
         val topRow = if (isBengaliFamily) {
             listOf("১" to "1", "২" to "2", "৩" to "3", "৪" to "4", "৫" to "5", "৬" to "6", "৭" to "7", "৮" to "8", "৯" to "9", "০" to "0")

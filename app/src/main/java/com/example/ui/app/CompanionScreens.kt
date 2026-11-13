@@ -687,11 +687,11 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Text(
                                                 text = lang.nativeName,
-                                                fontSize = 15.sp,
+                                                fontSize = 15.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
@@ -703,8 +703,14 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
                                             }
                                         }
                                         Text(
-                                            text = "${lang.displayName} • ${lang.region} • Key: ${lang.spacebarLabel}",
-                                            fontSize = 11.sp,
+                                            text = lang.displayName,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                        )
+                                        Text(
+                                            text = "${lang.scriptLabel} • ${lang.region} • Space: ${lang.spacebarLabel}",
+                                            fontSize = 10.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -748,7 +754,7 @@ fun BackendlessVerificationScreen() {
     val scope = rememberCoroutineScope()
 
     val checklistItems = listOf(
-        "32 Offline Language Packages" to "Pre-bundled keyboards & lexicons across South Asia (incl. Sylheti & Bengali Probhat), Middle East (RTL), Europe, and Asia.",
+        "${LanguageId.entries.size} Offline Language Packages" to "Pre-bundled keyboards & lexicons across South Asia (incl. UniBijoy, Sylheti & Bengali Probhat), Middle East (RTL), Europe, and Asia.",
         "On-Device Local Translation Engine" to "Bundled JSON phrase/lexicon model + N-gram alignment + SVO↔SOV grammar transfer + Room SQLite memory with 0 server calls.",
         "Hunspell-Style Offline Spell Checker" to "Damerau-Levenshtein fuzzy autocorrect runs 100% locally in CPU memory.",
         "Local Database (Room SQLite)" to "On-device SQLite storing learned words and pinned clipboard items with zero cloud sync.",
@@ -821,7 +827,7 @@ fun BackendlessVerificationScreen() {
                             }
                             val (phrases, lex) = OfflineTranslator.getModelStats()
                             isRunningDiag = false
-                            diagResults = "✔ SQLite DB: Connected (${db.openHelper.databaseName})\n✔ Language Packs Ready: ${LanguageId.entries.size} / 32\n✔ Local Translation Model: $phrases phrases, $lex lexicon entries\n✔ Translator Languages: ${OfflineTranslator.supportedLanguages.size} (Asset Loaded: ${OfflineTranslator.isPackLoadedFromAssets()})\n✔ Translation Memory Entries: $tmCount\n✔ Local Learned Words: ${words.size} cached\n✔ Remote Endpoints: 0\n✔ Backendless Status: PASSED"
+                            diagResults = "✔ SQLite DB: Connected (${db.openHelper.databaseName})\n✔ Language Packs Ready: ${LanguageId.entries.size} / ${LanguageId.entries.size}\n✔ Local Translation Model: $phrases phrases, $lex lexicon entries\n✔ Translator Languages: ${OfflineTranslator.supportedLanguages.size} (Asset Loaded: ${OfflineTranslator.isPackLoadedFromAssets()})\n✔ Translation Memory Entries: $tmCount\n✔ Local Learned Words: ${words.size} cached\n✔ Remote Endpoints: 0\n✔ Backendless Status: PASSED"
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
@@ -1003,17 +1009,7 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                                         selected = soundProfile == profile,
                                         onClick = {
                                             scope.launch { settingsManager.setSoundProfile(profile) }
-                                            runCatching {
-                                                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                                                val fx = when (profile) {
-                                                    SoundProfile.MECHANICAL -> AudioManager.FX_KEYPRESS_DELETE
-                                                    SoundProfile.TYPEWRITER -> AudioManager.FX_KEYPRESS_RETURN
-                                                    SoundProfile.THOCK -> AudioManager.FX_KEYPRESS_SPACEBAR
-                                                    SoundProfile.POPPY -> AudioManager.FX_KEY_CLICK
-                                                    SoundProfile.SYSTEM -> AudioManager.FX_KEYPRESS_STANDARD
-                                                }
-                                                am?.playSoundEffect(fx, profile.volume)
-                                            }
+                                            com.example.service.KeySoundEngine.preview(context, profile)
                                         },
                                         label = { Text(profile.label, fontSize = 12.sp, maxLines = 1) },
                                         modifier = Modifier.testTag("sound_profile_${profile.id}")
@@ -1086,7 +1082,7 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                     OutlinedTextField(
                         value = apiKeyInput,
                         onValueChange = { apiKeyInput = it },
-                        placeholder = { Text("AIzaSy... or AQ.Ab8...") },
+                        placeholder = { Text("AIzaSy... (from aistudio.google.com/app/apikey)") },
                         label = { Text("User Google Gemini API Key") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
@@ -1196,6 +1192,7 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                         TypingPreferencesCard()
                         PersonalDictionaryCard()
                         PersonalShortcutsCard()
+                        CustomAiPromptsCard(settingsManager = settingsManager)
                         DirectGeminiCard()
                     }
                 }
@@ -1206,7 +1203,114 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                 ToolbarCustomizerCard(settingsManager = settingsManager)
                 PersonalDictionaryCard()
                 PersonalShortcutsCard()
+                CustomAiPromptsCard(settingsManager = settingsManager)
                 DirectGeminiCard()
+            }
+        }
+    }
+}
+
+@Composable
+fun CustomAiPromptsCard(settingsManager: SettingsManager) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prompts by settingsManager.customAiPrompts.collectAsState(initial = emptyList())
+    var titleInput by remember { mutableStateOf("") }
+    var instructionInput by remember { mutableStateOf("") }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("custom_ai_prompts_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TGMagenta)
+                Column {
+                    Text(
+                        text = "কাস্টম এআই প্রম্পট ম্যানেজার (${prompts.size})",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "আপনার নিজস্ব প্রম্পট সেভ করুন — কীবোর্ডের Custom AI ট্যাবে সরাসরি দেখাবে",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = titleInput,
+                onValueChange = { titleInput = it },
+                label = { Text("প্রম্পট শিরোনাম (যেমন: অফিস ইমেইল)") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().testTag("custom_prompt_title_input")
+            )
+
+            OutlinedTextField(
+                value = instructionInput,
+                onValueChange = { instructionInput = it },
+                label = { Text("নির্দেশনা (যেমন: মার্জিত অফিসিয়াল বাংলায় সাজিয়ে দাও)") },
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 2,
+                modifier = Modifier.fillMaxWidth().testTag("custom_prompt_instruction_input")
+            )
+
+            Button(
+                onClick = {
+                    val t = titleInput.trim()
+                    val ins = instructionInput.trim()
+                    if (t.isNotBlank() && ins.isNotBlank()) {
+                        scope.launch {
+                            settingsManager.addCustomAiPrompt(t, ins)
+                            titleInput = ""
+                            instructionInput = ""
+                            Toast.makeText(context, "প্রম্পট সেভ হয়েছে", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                enabled = titleInput.isNotBlank() && instructionInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .testTag("save_custom_prompt_button")
+            ) {
+                Text("নতুন AI প্রম্পট যোগ করুন")
+            }
+
+            if (prompts.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    prompts.forEach { (title, instruction) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TGMagenta)
+                                Text(instruction, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(
+                                onClick = { scope.launch { settingsManager.removeCustomAiPrompt(title) } },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Prompt", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
             }
         }
     }

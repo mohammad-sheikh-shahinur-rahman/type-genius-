@@ -3,6 +3,7 @@ package com.example
 import com.example.data.KeyboardFontPreset
 import com.example.data.ai.TypeGeniusAiAction
 import com.example.data.ai.TypeGeniusAiEngine
+import com.example.data.dictionary.BigramPredictionEngine
 import com.example.data.dictionary.EmojiPredictionEngine
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.OfflineGlideEngine
@@ -10,6 +11,8 @@ import com.example.data.dictionary.OfflineGrammarEngine
 import com.example.data.dictionary.OfflineMathEvaluator
 import com.example.data.dictionary.OfflineSpellChecker
 import com.example.data.dictionary.UnicodeTextStyler
+import com.example.data.local.SmartClipType
+import com.example.data.local.SmartClipboardParser
 import com.example.data.phonetic.BengaliPhoneticParser
 import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardTheme
@@ -19,6 +22,7 @@ import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
 import com.example.ui.keyboard.KeyboardLayouts
 import com.example.ui.keyboard.KeyboardThemeData
+import com.example.ui.keyboard.MiniCalcEvaluator
 import com.example.ui.keyboard.StickerRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -31,9 +35,10 @@ import org.junit.Test
 class ExampleUnitTest {
 
     @Test
-    fun testAll32LanguagePackages_presentWithValidLayouts() {
-        assertEquals(32, LanguageId.entries.size)
+    fun testAll33LanguagePackages_presentWithValidLayouts() {
+        assertEquals(33, LanguageId.entries.size)
         assertTrue(LanguageId.entries.contains(LanguageId.SYLHETI))
+        assertTrue(LanguageId.entries.contains(LanguageId.BANGLA_UNIBIJOY))
 
         LanguageId.entries.forEach { lang ->
             val unshifted = KeyboardLayouts.getAlphabetRows(lang, isShifted = false)
@@ -98,6 +103,16 @@ class ExampleUnitTest {
 
         val dhonnobadResults = BengaliPhoneticParser.parsePhonetic("dhonnobad")
         assertTrue("dhonnobad should produce 'ধন্যবাদ'", dhonnobadResults.contains("ধন্যবাদ"))
+
+        // Avro phonetic inherent 'o', initial vowels, word-end 'ng', and auto-cap fixes
+        assertEquals("কবিতা", BengaliPhoneticParser.parsePhonetic("kobita").firstOrNull())
+        assertEquals("আকাশ", BengaliPhoneticParser.parsePhonetic("akash").firstOrNull())
+        assertEquals("অধিকার", BengaliPhoneticParser.parsePhonetic("odhikar").firstOrNull())
+        assertEquals("চলো", BengaliPhoneticParser.parsePhonetic("cholo").firstOrNull())
+        assertEquals("এবং", BengaliPhoneticParser.parsePhonetic("ebong").firstOrNull())
+        assertEquals("রং", BengaliPhoneticParser.parsePhonetic("rong").firstOrNull())
+        assertEquals("কর্ম", BengaliPhoneticParser.parsePhonetic("korrmo").firstOrNull())
+        assertEquals("ভালো", BengaliPhoneticParser.parsePhonetic("Valo").firstOrNull())
     }
 
     @Test
@@ -147,7 +162,7 @@ class ExampleUnitTest {
             "\u09CD\u09B2"  // ল-ফলা
         )
 
-        listOf(LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_NATIONAL).forEach { lang ->
+        listOf(LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_NATIONAL, LanguageId.BANGLA_UNIBIJOY).forEach { lang ->
             val allTokens = (KeyboardLayouts.getAlphabetRows(lang, false) + KeyboardLayouts.getAlphabetRows(lang, true))
                 .flatten()
                 .flatMap { key ->
@@ -572,5 +587,31 @@ class ExampleUnitTest {
             customPrompt = "ফ্লুয়েন্ট ন্যাচারাল ইংরেজিতে প্রকাশ করো"
         )
         assertEquals("i love you", engCustom.rewrittenText.lowercase())
+    }
+
+    @Test
+    fun testBigramPrediction_smartClipboardParser_andMiniCalc() {
+        val nextBn = BigramPredictionEngine.predictNextWords("আমি", LanguageId.BANGLA_PROBHAT)
+        assertTrue("Expected next-word predictions after আমি", nextBn.contains("ভালোবাসি"))
+        val nextEn = BigramPredictionEngine.predictNextWords("good", LanguageId.ENGLISH)
+        assertTrue("Expected next-word predictions after good", nextEn.contains("morning"))
+
+        BigramPredictionEngine.learnPair("typegenius", "awesome")
+        assertEquals("awesome", BigramPredictionEngine.predictNextWords("typegenius", LanguageId.ENGLISH).firstOrNull())
+
+        val otpClip = SmartClipboardParser.classify("Your verification OTP is 482910")
+        assertEquals(SmartClipType.OTP, otpClip.type)
+        assertEquals("482910", otpClip.extractedValue)
+
+        val urlClip = SmartClipboardParser.classify("Visit https://typegenius.dev/docs now")
+        assertEquals(SmartClipType.LINK, urlClip.type)
+        assertEquals("https://typegenius.dev/docs", urlClip.extractedValue)
+
+        val emailClip = SmartClipboardParser.classify("hello@typegenius.app")
+        assertEquals(SmartClipType.EMAIL, emailClip.type)
+
+        assertEquals("42", MiniCalcEvaluator.evaluateExpression("6*7"))
+        assertEquals("15", MiniCalcEvaluator.evaluateExpression("(10+20)÷2"))
+        assertEquals("1210", MiniCalcEvaluator.formatNumber(MiniCalcEvaluator.conversionPresets.first { it.id == "usd_bdt" }.convert(10.0)))
     }
 }

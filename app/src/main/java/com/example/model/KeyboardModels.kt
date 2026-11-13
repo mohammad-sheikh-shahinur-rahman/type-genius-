@@ -9,41 +9,57 @@ enum class LanguageId(
     val region: String
 ) {
     // South Asian, Bengali & Sylheti Packages
-    BANGLA_PROBHAT("bn_probhat", "Bengali (Probhat)", "বাংলা (প্রভাত)", "প্রভাত", false, "South Asia"),
-    BANGLA_PHONETIC("bn_phonetic", "Bengali (Avro Phonetic)", "বাংলা (ফোনেটিক)", "বাংলা", false, "South Asia"),
-    BANGLA_NATIONAL("bn_national", "Bengali (National)", "বাংলা (জাতীয়)", "জাতীয়", false, "South Asia"),
-    SYLHETI("syl", "Sylheti (Syloti Nagri & Bangla)", "সিলেটি (ꠍꠤꠟꠐꠤ)", "সিলেটি", false, "South Asia"),
+    BANGLA_PROBHAT("bn_probhat", "Bengali (Probhat)", "বাংলা • প্রভাত", "প্রভাত", false, "South Asia"),
+    BANGLA_PHONETIC("bn_phonetic", "Bengali (Avro Phonetic)", "বাংলা • অভ্র ফোনেটিক", "বাংলা", false, "South Asia"),
+    BANGLA_NATIONAL("bn_national", "Bengali (National / Jatiya)", "বাংলা • জাতীয়", "জাতীয়", false, "South Asia"),
+    BANGLA_UNIBIJOY("bn_unibijoy", "Bengali (UniBijoy)", "বাংলা • ইউনিবিজয়", "ইউনিবিজয়", false, "South Asia"),
+    SYLHETI("syl", "Sylheti (Syloti Nagri & Bangla)", "সিলেটি • ꠍꠤꠟꠐꠤ ও বাংলা", "সিলেটি", false, "South Asia"),
     ENGLISH("en", "English (US)", "English (US)", "EN", false, "Global"),
     ENGLISH_UK("en_gb", "English (UK)", "English (UK)", "EN-UK", false, "Global"),
-    HINDI("hi", "Hindi", "हिन्दी", "HI", false, "South Asia"),
-    ARABIC("ar", "Arabic", "العربية", "AR", true, "Middle East"),
-    URDU("ur", "Urdu", "اردو", "UR", true, "South Asia"),
-    ASSAMESE("as", "Assamese", "অসমীয়া", "অসমীয়া", false, "South Asia"),
-    NEPALI("ne", "Nepali", "नेपाली", "NE", false, "South Asia"),
-    SANSKRIT("sa", "Sanskrit", "संस्कृतम्", "SA", false, "South Asia"),
-    MARATHI("mr", "Marathi", "मराठी", "MR", false, "South Asia"),
-    TAMIL("ta", "Tamil", "தமிழ்", "TA", false, "South Asia"),
-    TELUGU("te", "Telugu", "తెలుగు", "TE", false, "South Asia"),
-    GUJARATI("gu", "Gujarati", "ગુજરાતી", "GU", false, "South Asia"),
-    PUNJABI("pa", "Punjabi (Gurmukhi)", "ਪੰਜਾਬੀ", "PA", false, "South Asia"),
-    MALAYALAM("ml", "Malayalam", "മലയാളം", "ML", false, "South Asia"),
-    KANNADA("kn", "Kannada", "ಕನ್ನಡ", "KN", false, "South Asia"),
+    HINDI("hi", "Hindi", "हिन्दी (Hindi)", "HI", false, "South Asia"),
+    ARABIC("ar", "Arabic", "العربية (Arabic)", "AR", true, "Middle East"),
+    URDU("ur", "Urdu", "اردو (Urdu)", "UR", true, "South Asia"),
+    ASSAMESE("as", "Assamese", "অসমীয়া (Assamese)", "অসমীয়া", false, "South Asia"),
+    NEPALI("ne", "Nepali", "नेपाली (Nepali)", "NE", false, "South Asia"),
+    SANSKRIT("sa", "Sanskrit", "संस्कृतम् (Sanskrit)", "SA", false, "South Asia"),
+    MARATHI("mr", "Marathi", "मराठी (Marathi)", "MR", false, "South Asia"),
+    TAMIL("ta", "Tamil", "தமிழ் (Tamil)", "TA", false, "South Asia"),
+    TELUGU("te", "Telugu", "తెలుగు (Telugu)", "TE", false, "South Asia"),
+    GUJARATI("gu", "Gujarati", "ગુજરાતી (Gujarati)", "GU", false, "South Asia"),
+    PUNJABI("pa", "Punjabi (Gurmukhi)", "ਪੰਜਾਬੀ (Punjabi)", "PA", false, "South Asia"),
+    MALAYALAM("ml", "Malayalam", "മലയാളം (Malayalam)", "ML", false, "South Asia"),
+    KANNADA("kn", "Kannada", "ಕನ್ನಡ (Kannada)", "KN", false, "South Asia"),
     // Middle East & RTL
-    PERSIAN("fa", "Persian (Farsi)", "فارسی", "FA", true, "Middle East"),
-    HEBREW("he", "Hebrew", "עברית", "HE", true, "Middle East"),
+    PERSIAN("fa", "Persian (Farsi)", "فارسی (Persian)", "FA", true, "Middle East"),
+    HEBREW("he", "Hebrew", "עברית (Hebrew)", "HE", true, "Middle East"),
     // European & Global
-    SPANISH("es", "Spanish", "Español", "ES", false, "Europe & Americas"),
-    FRENCH("fr", "French", "Français", "FR", false, "Europe & Americas"),
-    GERMAN("de", "German", "Deutsch", "DE", false, "Europe & Americas"),
-    PORTUGUESE("pt", "Portuguese", "Português", "PT", false, "Europe & Americas"),
-    ITALIAN("it", "Italian", "Italiano", "IT", false, "Europe & Americas"),
-    TURKISH("tr", "Turkish", "Türkçe", "TR", false, "Europe & Asia"),
-    RUSSIAN("ru", "Russian", "Русский", "RU", false, "Europe & Asia"),
+    SPANISH("es", "Spanish", "Español (Spanish)", "ES", false, "Europe & Americas"),
+    FRENCH("fr", "French", "Français (French)", "FR", false, "Europe & Americas"),
+    GERMAN("de", "German", "Deutsch (German)", "DE", false, "Europe & Americas"),
+    PORTUGUESE("pt", "Portuguese", "Português (Portuguese)", "PT", false, "Europe & Americas"),
+    ITALIAN("it", "Italian", "Italiano (Italian)", "IT", false, "Europe & Americas"),
+    TURKISH("tr", "Turkish", "Türkçe (Turkish)", "TR", false, "Europe & Asia"),
+    RUSSIAN("ru", "Russian", "Русский (Russian)", "RU", false, "Europe & Asia"),
     // Southeast & East Asia
     INDONESIAN("id", "Indonesian", "Bahasa Indonesia", "ID", false, "Southeast Asia"),
     MALAY("ms", "Malay", "Bahasa Melayu", "MS", false, "Southeast Asia"),
-    KOREAN("ko", "Korean", "한국어", "KO", false, "East Asia"),
-    JAPANESE("ja", "Japanese (Kana)", "日本語", "JP", false, "East Asia");
+    KOREAN("ko", "Korean", "한국어 (Korean)", "KO", false, "East Asia"),
+    JAPANESE("ja", "Japanese (Kana)", "日本語 (Japanese)", "JP", false, "East Asia");
+
+    val scriptLabel: String
+        get() = when (this) {
+            BANGLA_PROBHAT -> "বাংলা লে-আউট • প্রভাত"
+            BANGLA_PHONETIC -> "অভ্র ফোনেটিক • বাংলা বানান"
+            BANGLA_NATIONAL -> "বাংলা জাতীয় লে-আউট"
+            BANGLA_UNIBIJOY -> "ইউনিবিজয় ক্লাসিক লে-আউট"
+            SYLHETI -> "সিলেটি নাগরী ও বাংলা লিপি"
+            ENGLISH, ENGLISH_UK -> "Latin Script • QWERTY"
+            ARABIC, URDU, PERSIAN -> "RTL • Arabic Script"
+            HEBREW -> "RTL • Hebrew Script"
+            HINDI, NEPALI, MARATHI, SANSKRIT -> "Devanagari Script"
+            ASSAMESE -> "অসমীয়া লিপি"
+            else -> region
+        }
 
     companion object {
         fun fromCode(code: String): LanguageId {
@@ -129,6 +145,8 @@ enum class KeyboardViewMode {
     SYMBOLS_1,
     SYMBOLS_2,
     NUMPAD,
+    CALCULATOR,
+    UTILITIES,
     EMOJI,
     STICKERS_KAOMOJI,
     CLIPBOARD,
@@ -151,6 +169,8 @@ enum class KeyboardToolId(
     STICKERS("stickers", "Stickers", "toolbox_stickers"),
     CLIPBOARD("clipboard", "Clipboard", "toolbox_clipboard"),
     TRANSLATOR("translator", "Translate", "toolbox_translator"),
+    CALCULATOR("calculator", "Calculator", "toolbox_calculator"),
+    UTILITIES("utilities", "Notes & Date", "toolbox_utilities"),
     FANCY_FONTS("fancy_fonts", "Fonts", "toolbox_fonts"),
     THEMES("themes", "Themes", "toolbox_themes"),
     INCOGNITO("incognito", "Incognito", "toolbox_incognito"),
@@ -170,6 +190,8 @@ enum class KeyboardToolId(
             STICKERS,
             CLIPBOARD,
             TRANSLATOR,
+            CALCULATOR,
+            UTILITIES,
             FANCY_FONTS,
             THEMES,
             SETTINGS

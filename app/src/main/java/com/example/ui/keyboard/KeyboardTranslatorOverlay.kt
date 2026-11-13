@@ -735,17 +735,12 @@ fun TranslatorLanguagePickerOverlay(
                 ) {
                     items(langs, key = { it.code }) { lang ->
                         val isSelected = lang.code == selectedCode
-                        val displayTitle = if (lang.name == lang.nativeName) {
-                            lang.name
-                        } else {
-                            "${lang.name} / ${lang.nativeName}"
-                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
-                                    if (isSelected) TranslatorAccentBlue.copy(alpha = 0.08f)
+                                    if (isSelected) TranslatorAccentBlue.copy(alpha = 0.10f)
                                     else Color.Transparent
                                 )
                                 .clickable {
@@ -769,13 +764,26 @@ fun TranslatorLanguagePickerOverlay(
                                 )
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Column {
-                                Text(
-                                    text = displayTitle,
-                                    color = Color(0xFF1A1C1E),
-                                    fontSize = 15.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = lang.nativeName,
+                                        color = Color(0xFF1A1C1E),
+                                        fontSize = 15.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                    )
+                                    if (lang.name != lang.nativeName) {
+                                        Text(
+                                            text = "(${lang.name})",
+                                            color = Color(0xFF5F6368),
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                    }
+                                }
                                 Text(
                                     text = "✓ 100% Offline",
                                     color = Color(0xFF2E7D32),

@@ -69,6 +69,16 @@ class SettingsManager(private val context: Context) {
         val KEY_KEYBOARD_FONT_ID = stringPreferencesKey("keyboard_font_id")
         val KEY_CUSTOM_FONT_PATH = stringPreferencesKey("custom_font_path")
         val KEY_CUSTOM_FONT_NAME = stringPreferencesKey("custom_font_name")
+        val KEY_CUSTOM_AI_PROMPTS = stringPreferencesKey("custom_ai_prompts")
+        val KEY_NOTEPAD_DRAFT = stringPreferencesKey("notepad_draft")
+        val KEY_USER_TEMPLATES = stringPreferencesKey("user_templates")
+
+        val DEFAULT_USER_TEMPLATES: List<String> = listOf(
+            "আসসালামু আলাইকুম, কেমন আছেন?",
+            "ধন্যবাদ, কিছুক্ষণ পর যোগাযোগ করছি।",
+            "আফনে বালা আছইননি? সব ঠিকঠাক নি?",
+            "Thanks! I will get back to you shortly."
+        )
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -377,6 +387,91 @@ class SettingsManager(private val context: Context) {
             if (path.isNotBlank()) {
                 it[KEY_KEYBOARD_FONT_ID] = KeyboardFontPreset.CUSTOM_IMPORTED.id
             }
+        }
+    }
+
+    val customAiPrompts: Flow<List<Pair<String, String>>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[KEY_CUSTOM_AI_PROMPTS].orEmpty()
+        if (raw.isBlank()) emptyList()
+        else raw.split("\u001E").mapNotNull { entry ->
+            val parts = entry.split("\u001F", limit = 2)
+            if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
+                parts[0] to parts[1]
+            } else null
+        }
+    }
+
+    suspend fun setCustomAiPrompts(prompts: List<Pair<String, String>>) {
+        val encoded = prompts.filter { it.first.isNotBlank() && it.second.isNotBlank() }
+            .joinToString("\u001E") { (t, p) ->
+                "${t.trim().replace("\u001F", " ").replace("\u001E", " ")}\u001F${p.trim().replace("\u001F", " ").replace("\u001E", " ")}"
+            }
+        context.dataStore.edit { it[KEY_CUSTOM_AI_PROMPTS] = encoded }
+    }
+
+    suspend fun addCustomAiPrompt(title: String, instruction: String) {
+        val cleanTitle = title.trim()
+        val cleanInstruction = instruction.trim()
+        if (cleanTitle.isBlank() || cleanInstruction.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CUSTOM_AI_PROMPTS].orEmpty()
+                .split("\u001E")
+                .mapNotNull { entry ->
+                    val parts = entry.split("\u001F", limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) parts[0] to parts[1] else null
+                }
+                .filterNot { it.first.equals(cleanTitle, ignoreCase = true) }
+                .toMutableList()
+            current.add(0, cleanTitle to cleanInstruction)
+            prefs[KEY_CUSTOM_AI_PROMPTS] = current.take(15).joinToString("\u001E") { (t, p) -> "$t\u001F$p" }
+        }
+    }
+
+    suspend fun removeCustomAiPrompt(title: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CUSTOM_AI_PROMPTS].orEmpty()
+                .split("\u001E")
+                .mapNotNull { entry ->
+                    val parts = entry.split("\u001F", limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) parts[0] to parts[1] else null
+                }
+                .filterNot { it.first == title }
+            prefs[KEY_CUSTOM_AI_PROMPTS] = current.joinToString("\u001E") { (t, p) -> "$t\u001F$p" }
+        }
+    }
+
+    val notepadDraft: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_NOTEPAD_DRAFT] ?: ""
+    }
+
+    suspend fun setNotepadDraft(text: String) {
+        context.dataStore.edit { it[KEY_NOTEPAD_DRAFT] = text.take(4000) }
+    }
+
+    val userTemplates: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[KEY_USER_TEMPLATES]
+        if (raw == null) DEFAULT_USER_TEMPLATES
+        else if (raw.isBlank()) emptyList()
+        else raw.split("\u001E").filter { it.isNotBlank() }
+    }
+
+    suspend fun addUserTemplate(template: String) {
+        val clean = template.trim()
+        if (clean.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val existing = prefs[KEY_USER_TEMPLATES]?.split("\u001E")?.filter { it.isNotBlank() }
+                ?: DEFAULT_USER_TEMPLATES
+            val updated = (listOf(clean) + existing.filterNot { it == clean }).take(20)
+            prefs[KEY_USER_TEMPLATES] = updated.joinToString("\u001E")
+        }
+    }
+
+    suspend fun removeUserTemplate(template: String) {
+        context.dataStore.edit { prefs ->
+            val existing = prefs[KEY_USER_TEMPLATES]?.split("\u001E")?.filter { it.isNotBlank() }
+                ?: DEFAULT_USER_TEMPLATES
+            val updated = existing.filterNot { it == template }
+            prefs[KEY_USER_TEMPLATES] = updated.joinToString("\u001E")
         }
     }
 }

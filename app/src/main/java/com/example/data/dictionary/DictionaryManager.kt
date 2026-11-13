@@ -134,7 +134,7 @@ class DictionaryManager(context: Context) {
 
     fun getVocabulary(languageId: LanguageId): List<String> {
         return when (languageId) {
-            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL -> bengaliWords
+            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.BANGLA_UNIBIJOY -> bengaliWords
             LanguageId.SYLHETI -> sylhetiWords
             LanguageId.ASSAMESE -> assameseWords
             LanguageId.HINDI -> hindiWords

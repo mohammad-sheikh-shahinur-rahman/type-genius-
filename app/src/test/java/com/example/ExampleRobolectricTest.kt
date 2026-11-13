@@ -2,10 +2,13 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.SettingsManager
+import com.example.data.TypingStatsManager
 import com.example.data.dictionary.DictionaryManager
 import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.translator.OfflineTranslator
+import com.example.model.LanguageId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -106,5 +109,46 @@ class ExampleRobolectricTest {
         dict.clearAllLearnedWords()
         val afterClear = dict.learnedWordsFlow.first()
         assertTrue(afterClear.isEmpty())
+    }
+
+    @Test
+    fun `settings manager custom ai prompts, notepad draft, and templates persist offline`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsManager.getInstance(context)
+
+        settings.addCustomAiPrompt("Meeting Tone", "Rewrite politely for a manager")
+        val prompts = settings.customAiPrompts.first()
+        assertTrue(prompts.any { it.first == "Meeting Tone" && it.second.contains("manager") })
+
+        settings.removeCustomAiPrompt("Meeting Tone")
+        val afterRemove = settings.customAiPrompts.first()
+        assertTrue(afterRemove.none { it.first == "Meeting Tone" })
+
+        settings.setNotepadDraft("Quick reminder note")
+        assertEquals("Quick reminder note", settings.notepadDraft.first())
+
+        settings.addUserTemplate("InshaAllah see you soon")
+        assertTrue(settings.userTemplates.first().contains("InshaAllah see you soon"))
+    }
+
+    @Test
+    fun `typing stats manager tracks words, script ratio, wpm and resets offline`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val statsManager = TypingStatsManager.getInstance(context)
+        statsManager.resetStats()
+
+        statsManager.recordCommittedWord("আমি", LanguageId.BANGLA_UNIBIJOY, 1200L)
+        statsManager.recordCommittedWord("বাংলাদেশ", LanguageId.BANGLA_PHONETIC, 1400L)
+        statsManager.recordCommittedWord("hello", LanguageId.ENGLISH, 1000L)
+
+        val stats = statsManager.statsFlow.first()
+        assertEquals(3, stats.totalWords)
+        assertEquals(2, stats.banglaWords)
+        assertEquals(1, stats.englishWords)
+        assertTrue(stats.averageWpm > 0)
+        assertTrue(stats.banglaPercent in 60..70)
+
+        statsManager.resetStats()
+        assertEquals(0, statsManager.statsFlow.first().totalWords)
     }
 }

@@ -40,9 +40,11 @@ import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Mood
@@ -84,6 +86,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.dictionary.FancyFontStyle
+import com.example.data.local.SmartClipInfo
 import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardToolId
 import com.example.model.KeyboardViewMode
@@ -108,10 +111,13 @@ fun KeyboardTopBar(
     heightPreset: KeyboardHeightPreset = KeyboardHeightPreset.NORMAL,
     liveGrammarIssueCount: Int = 0,
     canUndoDelete: Boolean = false,
+    smartClipSuggestion: SmartClipInfo? = null,
     activeFancyStyle: FancyFontStyle = FancyFontStyle.NORMAL,
     draggingTool: KeyboardToolId? = null,
     isDragTargetActive: Boolean = false,
     voiceController: VoiceInputController?,
+    onSmartClipClick: (SmartClipInfo) -> Unit = {},
+    onDismissSmartClip: () -> Unit = {},
     onTopBarBoundsChanged: (Rect) -> Unit = {},
     onToolItemBoundsChanged: (KeyboardToolId, Rect) -> Unit = { _, _ -> },
     onStartToolDrag: (KeyboardToolId, Offset) -> Unit = { _, _ -> },
@@ -272,6 +278,8 @@ fun KeyboardTopBar(
                         KeyboardToolId.STICKERS -> viewMode == KeyboardViewMode.STICKERS_KAOMOJI
                         KeyboardToolId.CLIPBOARD -> viewMode == KeyboardViewMode.CLIPBOARD
                         KeyboardToolId.TRANSLATOR -> isTranslatorOpen || viewMode == KeyboardViewMode.TRANSLATOR
+                        KeyboardToolId.CALCULATOR -> viewMode == KeyboardViewMode.CALCULATOR
+                        KeyboardToolId.UTILITIES -> viewMode == KeyboardViewMode.UTILITIES
                         KeyboardToolId.FANCY_FONTS -> viewMode == KeyboardViewMode.FANCY_FONTS || activeFancyStyle != FancyFontStyle.NORMAL
                         KeyboardToolId.THEMES -> viewMode == KeyboardViewMode.THEME_PICKER
                         KeyboardToolId.INCOGNITO -> isIncognitoMode
@@ -344,6 +352,12 @@ fun KeyboardTopBar(
                                         if (viewMode == KeyboardViewMode.CLIPBOARD) KeyboardViewMode.LETTERS else KeyboardViewMode.CLIPBOARD
                                     )
                                     KeyboardToolId.TRANSLATOR -> onToggleTranslator()
+                                    KeyboardToolId.CALCULATOR -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.CALCULATOR) KeyboardViewMode.LETTERS else KeyboardViewMode.CALCULATOR
+                                    )
+                                    KeyboardToolId.UTILITIES -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.UTILITIES) KeyboardViewMode.LETTERS else KeyboardViewMode.UTILITIES
+                                    )
                                     KeyboardToolId.SETTINGS -> onOpenSettings()
                                     KeyboardToolId.THEMES -> onSelectViewMode(
                                         if (viewMode == KeyboardViewMode.THEME_PICKER) KeyboardViewMode.LETTERS else KeyboardViewMode.THEME_PICKER
@@ -507,7 +521,45 @@ fun KeyboardTopBar(
                     Spacer(modifier = Modifier.width(4.dp))
                 }
 
-                displayCandidates.forEachIndexed { index, candidate ->
+                if (smartClipSuggestion != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.accent.copy(alpha = 0.22f))
+                            .clickable {
+                                onHaptic()
+                                onSmartClipClick(smartClipSuggestion)
+                            }
+                            .padding(start = 7.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                            .testTag("smart_clip_quick_pill"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = smartClipSuggestion.quickPillLabel,
+                            color = colors.accent,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss smart clip",
+                            tint = colors.accent,
+                            modifier = Modifier
+                                .size(13.dp)
+                                .clickable {
+                                    onHaptic()
+                                    onDismissSmartClip()
+                                }
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+
+                val cappedCandidates = if (smartClipSuggestion != null) displayCandidates.take(3) else displayCandidates
+                cappedCandidates.forEachIndexed { index, candidate ->
                     val isRealPrediction = suggestions.isNotEmpty()
                     val isGrammarFix = isRealPrediction && candidate.startsWith("✓ ")
                     Box(
@@ -540,7 +592,7 @@ fun KeyboardTopBar(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (index < displayCandidates.lastIndex) {
+                    if (index < cappedCandidates.lastIndex) {
                         Box(
                             modifier = Modifier
                                 .width(1.dp)
@@ -646,6 +698,18 @@ private fun TopBarToolContent(
         )
         KeyboardToolId.TRANSLATOR -> Icon(
             imageVector = Icons.Default.Translate,
+            contentDescription = tool.label,
+            tint = tint,
+            modifier = Modifier.size(19.dp)
+        )
+        KeyboardToolId.CALCULATOR -> Icon(
+            imageVector = Icons.Default.Calculate,
+            contentDescription = tool.label,
+            tint = tint,
+            modifier = Modifier.size(19.dp)
+        )
+        KeyboardToolId.UTILITIES -> Icon(
+            imageVector = Icons.Default.EventNote,
             contentDescription = tool.label,
             tint = tint,
             modifier = Modifier.size(19.dp)

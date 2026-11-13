@@ -65,8 +65,9 @@ fun PersonalDictionaryCard() {
     var selectedLang by remember { mutableStateOf("bn_probhat") }
 
     val langChoices = listOf(
-        "bn_probhat" to "বাংলা",
-        "bn_phonetic" to "Banglish",
+        "bn_probhat" to "বাংলা (প্রভাত)",
+        "bn_phonetic" to "অভ্র ফোনেটিক",
+        "bn_unibijoy" to "ইউনিবিজয়",
         "en" to "English",
         "syl" to "সিলেটি"
     )
