@@ -34,7 +34,9 @@ import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -345,10 +347,12 @@ fun MoreToolsPanel(
     oneHandedMode: OneHandedMode,
     heightPreset: KeyboardHeightPreset,
     floatingMode: Boolean,
+    isIncognitoMode: Boolean = false,
     onSelectViewMode: (KeyboardViewMode) -> Unit,
     onCycleOneHanded: () -> Unit,
     onCycleHeight: () -> Unit,
     onToggleFloating: () -> Unit,
+    onToggleIncognito: () -> Unit = {},
     onShareApp: () -> Unit,
     onHaptic: () -> Unit,
     modifier: Modifier = Modifier
@@ -363,7 +367,7 @@ fun MoreToolsPanel(
 
     val tools = listOf(
         ToolTile(
-            label = if (oneHandedMode == OneHandedMode.FULL) "One-handed" else oneHandedMode.label,
+            label = if (oneHandedMode == OneHandedMode.FULL) "One-hand/Split" else oneHandedMode.label,
             icon = Icons.Default.Smartphone,
             active = oneHandedMode != OneHandedMode.FULL,
             testTag = "tool_one_handed",
@@ -376,10 +380,17 @@ fun MoreToolsPanel(
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TEXT_EDITOR) }
         ),
         ToolTile(
-            label = "Share",
-            icon = Icons.Default.Share,
-            testTag = "tool_share",
-            onClick = { onHaptic(); onShareApp() }
+            label = "Fancy Fonts",
+            icon = Icons.Default.TextFormat,
+            testTag = "tool_fancy_fonts",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.FANCY_FONTS) }
+        ),
+        ToolTile(
+            label = "Incognito",
+            icon = Icons.Default.VisibilityOff,
+            active = isIncognitoMode,
+            testTag = "tool_incognito",
+            onClick = { onHaptic(); onToggleIncognito() }
         ),
         ToolTile(
             label = "Translate",
@@ -412,6 +423,12 @@ fun MoreToolsPanel(
             icon = Icons.Default.Dialpad,
             testTag = "tool_numpad",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.NUMPAD) }
+        ),
+        ToolTile(
+            label = "Share",
+            icon = Icons.Default.Share,
+            testTag = "tool_share",
+            onClick = { onHaptic(); onShareApp() }
         )
     )
 
@@ -421,9 +438,12 @@ fun MoreToolsPanel(
             .background(colors.background)
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
-        val cols = if (maxWidth >= 520.dp) 4 else 4
+        val cols = if (maxWidth >= 520.dp) 5 else 4
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(212.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
@@ -451,7 +471,7 @@ fun MoreToolsPanel(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(50.dp)
+                                    .height(48.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(
                                         if (item.active) colors.accent.copy(alpha = 0.25f)
@@ -467,7 +487,7 @@ fun MoreToolsPanel(
                                     imageVector = item.icon,
                                     contentDescription = item.label,
                                     tint = if (item.active) colors.accent else colors.textPrimary,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(21.dp)
                                 )
                             }
                             Text(

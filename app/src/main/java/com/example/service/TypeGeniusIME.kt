@@ -30,7 +30,12 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
 import com.example.data.SettingsManager
 import com.example.data.dictionary.DictionaryManager
+import com.example.data.dictionary.FancyFontStyle
+import com.example.data.dictionary.OfflineGlideEngine
+import com.example.data.dictionary.OfflineMathEvaluator
+import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.ClipboardItem
+import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.phonetic.BengaliPhoneticParser
 import com.example.data.translator.OfflineTranslator
@@ -38,6 +43,7 @@ import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
+import com.example.model.SoundProfile
 import com.example.ui.keyboard.KeyboardView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +69,7 @@ class TypeGeniusIME : InputMethodService(),
 
     private lateinit var settingsManager: SettingsManager
     private lateinit var dictionaryManager: DictionaryManager
+    private lateinit var shortcutRepository: TextShortcutRepository
     private lateinit var database: TypeGeniusDatabase
     private lateinit var voiceInputController: VoiceInputController
     private var audioManager: AudioManager? = null
@@ -90,9 +97,16 @@ class TypeGeniusIME : InputMethodService(),
     private var translatorComposingPreview by mutableStateOf("")
     private var isTranslatorVoiceActive by mutableStateOf(false)
 
+    private var activeFancyStyle by mutableStateOf(FancyFontStyle.NORMAL)
+    private var lastTypedWordPreview by mutableStateOf("")
+    private var lastDeletedUndoText by mutableStateOf("")
+    private var lastGlideCommittedWord by mutableStateOf("")
+
     private var soundEnabled = false
+    private var soundProfile = SoundProfile.SYSTEM
     private var spellCheckEnabled = true
     private var autoCapitalizeEnabled = true
+    private var isIncognitoEnabled = false
 
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
 
@@ -103,15 +117,19 @@ class TypeGeniusIME : InputMethodService(),
 
         settingsManager = SettingsManager.getInstance(this)
         dictionaryManager = DictionaryManager(this)
+        shortcutRepository = TextShortcutRepository(this)
         database = TypeGeniusDatabase.getDatabase(this)
         voiceInputController = VoiceInputController(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
         serviceScope.launch {
             launch { OfflineTranslator.initialize(this@TypeGeniusIME) }
+            launch { shortcutRepository.ensureSeededDefaults() }
             launch { settingsManager.soundOnKeyPress.collect { soundEnabled = it } }
+            launch { settingsManager.soundProfile.collect { soundProfile = it } }
             launch { settingsManager.spellCheckEnabled.collect { spellCheckEnabled = it } }
             launch { settingsManager.autoCapitalize.collect { autoCapitalizeEnabled = it } }
+            launch { settingsManager.isIncognitoMode.collect { isIncognitoEnabled = it } }
             launch {
                 settingsManager.enabledLanguages.collect { enabledCodes ->
                     val list = enabledCodes.map { LanguageId.fromCode(it) }
@@ -134,6 +152,7 @@ class TypeGeniusIME : InputMethodService(),
         try {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+                if (isIncognitoEnabled) return@OnPrimaryClipChangedListener
                 val clip = cm?.primaryClip
                 if (clip != null && clip.itemCount > 0) {
                     val text = clip.getItemAt(0).text?.toString()
@@ -180,6 +199,9 @@ class TypeGeniusIME : InputMethodService(),
                     translatorSourceText = translatorSourceText,
                     translatorComposingPreview = translatorComposingPreview,
                     isTranslatorVoiceActive = isTranslatorVoiceActive,
+                    activeFancyStyle = activeFancyStyle,
+                    lastTypedWordPreview = lastTypedWordPreview,
+                    canUndoDelete = lastDeletedUndoText.isNotEmpty(),
                     onOpenTranslator = { openTranslator() },
                     onCloseTranslator = { closeTranslator() },
                     onTranslatorSourceTextChange = { translatorSourceText = it },
@@ -248,6 +270,18 @@ class TypeGeniusIME : InputMethodService(),
                     onPaste = {
                         currentInputConnection?.performContextMenuAction(android.R.id.paste)
                     },
+                    onDeleteWordBackward = { deleteWordBackward() },
+                    onUndoDelete = { undoLastDeletedWord() },
+                    onGlideCommitted = { trail, keyCenters -> handleGlideSwipe(trail, keyCenters) },
+                    onSelectFancyStyle = { style ->
+                        activeFancyStyle = style
+                        if (style == FancyFontStyle.NORMAL) viewMode = KeyboardViewMode.LETTERS
+                    },
+                    onTransformLastWord = { style -> transformLastWordWithStyle(style) },
+                    onInsertTextSnippet = { snippet ->
+                        if (isTranslatorOpen) translatorSourceText += snippet
+                        else currentInputConnection?.commitText(snippet, 1)
+                    },
                     voiceController = voiceInputController
                 )
             }
@@ -263,6 +297,8 @@ class TypeGeniusIME : InputMethodService(),
         translatorComposingPreview = ""
         isTypingActive = false
         isTranslatorVoiceActive = false
+        lastDeletedUndoText = ""
+        lastGlideCommittedWord = ""
         viewMode = KeyboardViewMode.LETTERS
         updateAutoCapitalizeState()
 
@@ -308,11 +344,15 @@ class TypeGeniusIME : InputMethodService(),
             KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
             else -> AudioManager.FX_KEYPRESS_STANDARD
         }
-        audioManager?.playSoundEffect(effect, 0.5f)
+        audioManager?.playSoundEffect(effect, soundProfile.volume)
     }
 
     private fun handleKeyAction(action: KeyAction) {
         playKeyClickSound(action.type)
+        if (action.type != KeyType.BACKSPACE) {
+            lastDeletedUndoText = ""
+            lastGlideCommittedWord = ""
+        }
 
         if (isTranslatorOpen) {
             handleTranslatorKeyAction(action)
@@ -323,11 +363,11 @@ class TypeGeniusIME : InputMethodService(),
 
         when (action.type) {
             KeyType.CHARACTER -> {
-                val char = action.label
+                val rawChar = action.label
                 isTypingActive = true
 
-                if (activeLanguage == LanguageId.BANGLA_PHONETIC && char.matches(Regex("[a-zA-Z]"))) {
-                    composingBuffer += char
+                if (activeLanguage == LanguageId.BANGLA_PHONETIC && rawChar.matches(Regex("[a-zA-Z]"))) {
+                    composingBuffer += rawChar
                     val candidates = BengaliPhoneticParser.parsePhonetic(composingBuffer)
                     val top = candidates.firstOrNull() ?: composingBuffer
                     ic.setComposingText(top, 1)
@@ -336,7 +376,10 @@ class TypeGeniusIME : InputMethodService(),
                     if (composingBuffer.isNotEmpty()) {
                         commitComposing()
                     }
-                    ic.commitText(char, 1)
+                    val charToCommit = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                        UnicodeTextStyler.styleSingleInput(rawChar, activeFancyStyle)
+                    } else rawChar
+                    ic.commitText(charToCommit, 1)
                     if (isShifted && !isCapsLock) {
                         isShifted = false
                     }
@@ -349,10 +392,17 @@ class TypeGeniusIME : InputMethodService(),
                 if (composingBuffer.isNotEmpty()) {
                     val topCandidate = suggestions.firstOrNull() ?: composingBuffer
                     ic.commitText(topCandidate, 1)
-                    serviceScope.launch {
-                        dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
+                    lastTypedWordPreview = topCandidate
+                    if (!isIncognitoEnabled) {
+                        serviceScope.launch {
+                            dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
+                        }
                     }
                     composingBuffer = ""
+                } else {
+                    val before = ic.getTextBeforeCursor(32, 0)?.toString() ?: ""
+                    val token = before.takeLastWhile { !it.isWhitespace() }
+                    if (token.isNotEmpty()) lastTypedWordPreview = token
                 }
                 ic.commitText(" ", 1)
                 isTypingActive = false
@@ -555,11 +605,23 @@ class TypeGeniusIME : InputMethodService(),
             } else {
                 ""
             }
-            suggestions = dictionaryManager.getPredictions(
+            val math = OfflineMathEvaluator.evaluateIfTriggered(lastWord)
+            val shortcutMatches = if (lastWord.isNotEmpty()) {
+                shortcutRepository.findMatchingExpansions(lastWord)
+            } else emptyList()
+            val dictPreds = dictionaryManager.getPredictions(
                 input = lastWord,
                 languageId = activeLanguage,
                 spellCheckEnabled = spellCheckEnabled
             )
+            suggestions = buildList {
+                math?.let {
+                    add(it.resultString)
+                    add(it.equationString)
+                }
+                addAll(shortcutMatches)
+                addAll(dictPreds)
+            }.distinct().take(6)
         }
     }
 
@@ -695,8 +757,10 @@ class TypeGeniusIME : InputMethodService(),
             if (composingBuffer.isNotEmpty()) {
                 val top = suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
                 translatorSourceText += top
-                serviceScope.launch {
-                    dictionaryManager.recordWordUsed(top, activeLanguage)
+                if (!isIncognitoEnabled) {
+                    serviceScope.launch {
+                        dictionaryManager.recordWordUsed(top, activeLanguage)
+                    }
                 }
                 composingBuffer = ""
                 translatorComposingPreview = ""
@@ -708,8 +772,11 @@ class TypeGeniusIME : InputMethodService(),
         if (composingBuffer.isNotEmpty()) {
             val topCandidate = suggestions.firstOrNull() ?: composingBuffer
             ic.commitText(topCandidate, 1)
-            serviceScope.launch {
-                dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
+            lastTypedWordPreview = topCandidate
+            if (!isIncognitoEnabled) {
+                serviceScope.launch {
+                    dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
+                }
             }
             composingBuffer = ""
             isTypingActive = false
@@ -718,9 +785,12 @@ class TypeGeniusIME : InputMethodService(),
     }
 
     private fun handleSuggestionCommit(candidate: String) {
+        lastDeletedUndoText = ""
         if (isTranslatorOpen) {
             translatorSourceText = if (composingBuffer.isNotEmpty()) {
                 "$translatorSourceText$candidate "
+            } else if (lastGlideCommittedWord.isNotEmpty() && translatorSourceText.endsWith("$lastGlideCommittedWord ")) {
+                translatorSourceText.dropLast(lastGlideCommittedWord.length + 1) + "$candidate "
             } else {
                 val currentToken = translatorSourceText.takeLastWhile { !it.isWhitespace() }
                 val base = if (currentToken.isNotEmpty()) {
@@ -732,9 +802,12 @@ class TypeGeniusIME : InputMethodService(),
             }
             composingBuffer = ""
             translatorComposingPreview = ""
+            lastGlideCommittedWord = ""
             isTypingActive = false
-            serviceScope.launch {
-                dictionaryManager.recordWordUsed(candidate, activeLanguage)
+            if (!isIncognitoEnabled) {
+                serviceScope.launch {
+                    dictionaryManager.recordWordUsed(candidate, activeLanguage)
+                }
             }
             updateTranslatorSuggestions()
             return
@@ -743,6 +816,12 @@ class TypeGeniusIME : InputMethodService(),
         if (composingBuffer.isNotEmpty()) {
             ic.commitText("$candidate ", 1)
             composingBuffer = ""
+        } else if (lastGlideCommittedWord.isNotEmpty()) {
+            val before = ic.getTextBeforeCursor(lastGlideCommittedWord.length + 2, 0)?.toString() ?: ""
+            if (before.endsWith("$lastGlideCommittedWord ")) {
+                ic.deleteSurroundingText(lastGlideCommittedWord.length + 1, 0)
+            }
+            ic.commitText("$candidate ", 1)
         } else {
             val before = ic.getTextBeforeCursor(32, 0)?.toString() ?: ""
             val currentToken = before.takeLastWhile { !it.isWhitespace() }
@@ -751,12 +830,153 @@ class TypeGeniusIME : InputMethodService(),
             }
             ic.commitText("$candidate ", 1)
         }
+        lastTypedWordPreview = candidate
+        lastGlideCommittedWord = ""
         isTypingActive = false
-        serviceScope.launch {
-            dictionaryManager.recordWordUsed(candidate, activeLanguage)
+        if (!isIncognitoEnabled) {
+            serviceScope.launch {
+                dictionaryManager.recordWordUsed(candidate, activeLanguage)
+            }
         }
         updateAutoCapitalizeState()
         updateSuggestions()
+    }
+
+    private fun deleteWordBackward() {
+        if (isTranslatorOpen) {
+            if (composingBuffer.isNotEmpty()) {
+                val preview = translatorComposingPreview.ifEmpty { composingBuffer }
+                lastDeletedUndoText = preview + lastDeletedUndoText
+                composingBuffer = ""
+                translatorComposingPreview = ""
+                isTypingActive = false
+                updateTranslatorSuggestions()
+                return
+            }
+            if (translatorSourceText.isEmpty()) return
+            val trimmedEnd = translatorSourceText.trimEnd()
+            val cutStart = trimmedEnd.lastIndexOfAny(charArrayOf(' ', '\n', '\t')) + 1
+            val deleted = translatorSourceText.substring(cutStart)
+            translatorSourceText = translatorSourceText.substring(0, cutStart)
+            lastDeletedUndoText = deleted + lastDeletedUndoText
+            updateTranslatorSuggestions()
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        if (composingBuffer.isNotEmpty()) {
+            val top = suggestions.firstOrNull() ?: composingBuffer
+            ic.commitText("", 1)
+            lastDeletedUndoText = top + lastDeletedUndoText
+            composingBuffer = ""
+            isTypingActive = false
+            updateSuggestions()
+            return
+        }
+
+        val before = ic.getTextBeforeCursor(64, 0)?.toString() ?: return
+        if (before.isEmpty()) return
+        val trimmedEnd = before.trimEnd()
+        val cutIndexInBefore = if (trimmedEnd.isEmpty()) 0 else {
+            val ws = trimmedEnd.lastIndexOfAny(charArrayOf(' ', '\n', '\t'))
+            if (ws >= 0) ws + 1 else 0
+        }
+        val deletedChunk = before.substring(cutIndexInBefore)
+        if (deletedChunk.isNotEmpty()) {
+            ic.deleteSurroundingText(deletedChunk.length, 0)
+            lastDeletedUndoText = deletedChunk + lastDeletedUndoText
+        }
+        updateAutoCapitalizeState()
+        updateSuggestions()
+    }
+
+    private fun undoLastDeletedWord() {
+        val toRestore = lastDeletedUndoText
+        if (toRestore.isEmpty()) return
+        lastDeletedUndoText = ""
+        if (isTranslatorOpen) {
+            translatorSourceText += toRestore
+            updateTranslatorSuggestions()
+        } else {
+            currentInputConnection?.commitText(toRestore, 1)
+            updateAutoCapitalizeState()
+            updateSuggestions()
+        }
+    }
+
+    private fun handleGlideSwipe(
+        trail: List<Pair<Float, Float>>,
+        keyCenters: Map<String, Pair<Float, Float>>
+    ) {
+        serviceScope.launch {
+            val vocab = dictionaryManager.getVocabulary(activeLanguage)
+            val candidates = OfflineGlideEngine.resolveGlideCandidates(
+                trail = trail,
+                keyCenters = keyCenters,
+                vocabulary = vocab,
+                languageId = activeLanguage,
+                limit = 5
+            )
+            if (candidates.isEmpty()) return@launch
+
+            val rawTop = candidates.first()
+            val topStyled = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                UnicodeTextStyler.styleText(rawTop, activeFancyStyle)
+            } else rawTop
+
+            lastDeletedUndoText = ""
+            lastGlideCommittedWord = topStyled
+            lastTypedWordPreview = rawTop
+
+            if (isTranslatorOpen) {
+                composingBuffer = ""
+                translatorComposingPreview = ""
+                translatorSourceText += "$topStyled "
+                suggestions = candidates
+            } else {
+                val ic = currentInputConnection ?: return@launch
+                if (composingBuffer.isNotEmpty()) {
+                    ic.finishComposingText()
+                    composingBuffer = ""
+                }
+                ic.commitText("$topStyled ", 1)
+                suggestions = candidates
+                updateAutoCapitalizeState()
+            }
+
+            if (!isIncognitoEnabled) {
+                dictionaryManager.recordWordUsed(rawTop, activeLanguage)
+            }
+        }
+    }
+
+    private fun transformLastWordWithStyle(style: FancyFontStyle) {
+        if (isTranslatorOpen) {
+            val trimmed = translatorSourceText.trimEnd()
+            val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
+            if (lastWord.isNotEmpty()) {
+                val base = trimmed.dropLast(lastWord.length)
+                translatorSourceText = "$base${UnicodeTextStyler.styleText(lastWord, style)} "
+            } else {
+                translatorSourceText += UnicodeTextStyler.styleText("TypeGenius", style)
+            }
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        if (composingBuffer.isNotEmpty()) commitComposing()
+        val before = ic.getTextBeforeCursor(64, 0)?.toString() ?: ""
+        val trimmed = before.trimEnd()
+        val trailingSpaces = before.length - trimmed.length
+        val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
+        if (lastWord.isNotEmpty()) {
+            ic.deleteSurroundingText(lastWord.length + trailingSpaces, 0)
+            ic.commitText(UnicodeTextStyler.styleText(lastWord, style) + " ", 1)
+            lastTypedWordPreview = lastWord
+        } else {
+            ic.commitText(UnicodeTextStyler.styleText("TypeGenius", style), 1)
+        }
+        viewMode = KeyboardViewMode.LETTERS
     }
 
     private fun cycleLanguage(forward: Boolean) {
@@ -783,6 +1003,7 @@ class TypeGeniusIME : InputMethodService(),
         isTypingActive = false
         isShifted = false
         isCapsLock = false
+        lastGlideCommittedWord = ""
 
         serviceScope.launch {
             settingsManager.setActiveLanguageCode(language.code)
@@ -793,7 +1014,10 @@ class TypeGeniusIME : InputMethodService(),
     private fun updateSuggestions() {
         serviceScope.launch {
             if (composingBuffer.isNotEmpty()) {
-                suggestions = BengaliPhoneticParser.parsePhonetic(composingBuffer)
+                val shortcutMatches = shortcutRepository.findMatchingExpansions(composingBuffer)
+                suggestions = (shortcutMatches + BengaliPhoneticParser.parsePhonetic(composingBuffer))
+                    .distinct()
+                    .take(6)
             } else {
                 val ic = currentInputConnection
                 val textBefore = ic?.getTextBeforeCursor(28, 0)?.toString() ?: ""
@@ -802,11 +1026,26 @@ class TypeGeniusIME : InputMethodService(),
                 } else {
                     ""
                 }
-                suggestions = dictionaryManager.getPredictions(
+                if (lastWord.isNotEmpty()) {
+                    lastTypedWordPreview = lastWord
+                }
+                val math = OfflineMathEvaluator.evaluateIfTriggered(lastWord)
+                val shortcutMatches = if (lastWord.isNotEmpty()) {
+                    shortcutRepository.findMatchingExpansions(lastWord)
+                } else emptyList()
+                val dictPreds = dictionaryManager.getPredictions(
                     input = lastWord,
                     languageId = activeLanguage,
                     spellCheckEnabled = spellCheckEnabled
                 )
+                suggestions = buildList {
+                    math?.let {
+                        add(it.resultString)
+                        add(it.equationString)
+                    }
+                    addAll(shortcutMatches)
+                    addAll(dictPreds)
+                }.distinct().take(6)
             }
         }
     }

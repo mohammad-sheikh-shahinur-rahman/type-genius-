@@ -1,6 +1,10 @@
 package com.example
 
+import com.example.data.dictionary.FancyFontStyle
+import com.example.data.dictionary.OfflineGlideEngine
+import com.example.data.dictionary.OfflineMathEvaluator
 import com.example.data.dictionary.OfflineSpellChecker
+import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.phonetic.BengaliPhoneticParser
 import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardTheme
@@ -11,6 +15,7 @@ import com.example.ui.keyboard.KeyboardThemeData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -217,5 +222,78 @@ class ExampleUnitTest {
         // Bengali -> Chinese Simplified
         val bnToZh = OfflineTranslator.translate("হ্যালো", "bn", "zh")
         assertEquals("你好", bnToZh.translatedText)
+    }
+
+    @Test
+    fun testOfflineMathEvaluator_englishAndBengaliDigits() {
+        val add = OfflineMathEvaluator.evaluateIfTriggered("12+8=")
+        assertEquals("20", add?.resultString)
+        assertEquals("12+8=20", add?.equationString)
+
+        val parens = OfflineMathEvaluator.evaluateIfTriggered("(25*4)-10=")
+        assertEquals("90", parens?.resultString)
+
+        val decimal = OfflineMathEvaluator.evaluateIfTriggered("10/4=")
+        assertEquals("2.5", decimal?.resultString)
+
+        val bnAdd = OfflineMathEvaluator.evaluateIfTriggered("১২+৮=")
+        assertEquals("২০", bnAdd?.resultString)
+
+        assertNull(OfflineMathEvaluator.evaluateIfTriggered("hello="))
+        assertNull(OfflineMathEvaluator.evaluateIfTriggered("12+8"))
+    }
+
+    @Test
+    fun testUnicodeTextStyler_transformsLatinAndDecorators() {
+        val bold = UnicodeTextStyler.styleText("Hi 1", FancyFontStyle.BOLD_SANS)
+        assertEquals("𝗛𝗶 𝟭", bold)
+
+        val circled = UnicodeTextStyler.styleText("abc", FancyFontStyle.CIRCLED)
+        assertEquals("ⓐⓑⓒ", circled)
+
+        val banglaDecor = UnicodeTextStyler.styleText("বাংলা", FancyFontStyle.DECORATED_STAR)
+        assertEquals("✦ বাংলা ✦", banglaDecor)
+    }
+
+    @Test
+    fun testOfflineGlideEngine_resolvesEnglishAndBanglishPhonetic() {
+        val centers = mapOf(
+            "q" to (50f to 50f), "w" to (150f to 50f), "e" to (250f to 50f), "r" to (350f to 50f),
+            "t" to (450f to 50f), "y" to (550f to 50f), "u" to (650f to 50f), "i" to (750f to 50f),
+            "o" to (850f to 50f), "p" to (950f to 50f),
+            "a" to (100f to 150f), "s" to (200f to 150f), "d" to (300f to 150f), "f" to (400f to 150f),
+            "g" to (500f to 150f), "h" to (600f to 150f), "j" to (700f to 150f), "k" to (800f to 150f),
+            "l" to (900f to 150f),
+            "z" to (150f to 250f), "x" to (250f to 250f), "c" to (350f to 250f), "v" to (450f to 250f),
+            "b" to (550f to 250f), "n" to (650f to 250f), "m" to (750f to 250f)
+        )
+        val englishVocab = listOf("hello", "world", "friend", "happy", "thanks")
+        val helloTrail = listOf(
+            600f to 150f, // h
+            250f to 50f,  // e
+            900f to 150f, // l
+            880f to 140f, // l
+            850f to 50f   // o
+        )
+        val enResult = OfflineGlideEngine.resolveGlideCandidates(
+            trail = helloTrail,
+            keyCenters = centers,
+            vocabulary = englishVocab,
+            languageId = LanguageId.ENGLISH
+        )
+        assertTrue("Expected 'hello' in glide results: $enResult", enResult.contains("hello"))
+
+        val amiTrail = listOf(
+            100f to 150f, // a
+            750f to 250f, // m
+            750f to 50f   // i
+        )
+        val bnResult = OfflineGlideEngine.resolveGlideCandidates(
+            trail = amiTrail,
+            keyCenters = centers,
+            vocabulary = englishVocab,
+            languageId = LanguageId.BANGLA_PHONETIC
+        )
+        assertTrue("Expected 'আমি' in Banglish glide results: $bnResult", bnResult.contains("আমি"))
     }
 }

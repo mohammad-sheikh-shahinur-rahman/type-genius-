@@ -77,7 +77,9 @@ import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
+import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
+import com.example.model.VibrationStrength
 import com.example.ui.keyboard.KeyboardThemeData
 import com.example.ui.theme.TGMagenta
 import com.example.ui.theme.TGViolet
@@ -378,6 +380,8 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
     val showLangLabel by settingsManager.showActiveLanguageOnSpacebar.collectAsState(initial = true)
     val longPressLangPicker by settingsManager.longPressLanguageSelector.collectAsState(initial = true)
     val showAltLangKey by settingsManager.showAlternativeLanguageKey.collectAsState(initial = true)
+    val isGlideEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
+    val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
 
     Column(
         modifier = Modifier
@@ -386,14 +390,30 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Spacebar Gesture Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text("Configure the production-ready swipe switching gesture on the native Android spacebar.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Spacebar & Typing Gestures", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text("Configure offline Glide swipe-to-type, Backspace swipe delete, and Spacebar language switching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                SettingToggleRow(
+                    title = "Offline Glide Typing (Swipe-to-Type)",
+                    subtitle = "Slide finger across keys to input English & Banglish Phonetic words",
+                    checked = isGlideEnabled,
+                    onCheckedChange = { scope.launch { settingsManager.setGlideTypingEnabled(it) } },
+                    switchModifier = Modifier.testTag("toggle_glide_typing")
+                )
+
+                SettingToggleRow(
+                    title = "Backspace Swipe-Left Delete",
+                    subtitle = "Swipe left on ⌫ to delete whole words quickly with Undo",
+                    checked = isBackspaceSwipeEnabled,
+                    onCheckedChange = { scope.launch { settingsManager.setBackspaceSwipeEnabled(it) } },
+                    switchModifier = Modifier.testTag("toggle_backspace_swipe")
+                )
+
                 SettingToggleRow(
                     title = "Enable Spacebar Swipe",
                     subtitle = "Swipe Left-to-Right for next language, Right-to-Left for previous",
@@ -454,7 +474,7 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
 
                 SettingToggleRow(
                     title = "Alternative Globe Language Button",
-                    subtitle = "Show traditional 🌐 button alongside spacebar for 1-tap switching",
+                    subtitle = "Show quick script switch button alongside spacebar for 1-tap switching",
                     checked = showAltLangKey,
                     onCheckedChange = { scope.launch { settingsManager.setShowAlternativeLanguageKey(it) } }
                 )
@@ -767,6 +787,9 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
     val currentTheme by settingsManager.keyboardTheme.collectAsState(initial = KeyboardTheme.MATERIAL_YOU)
     val numberRowEnabled by settingsManager.numberRowEnabled.collectAsState(initial = false)
     val soundOnKeyPress by settingsManager.soundOnKeyPress.collectAsState(initial = false)
+    val soundProfile by settingsManager.soundProfile.collectAsState(initial = SoundProfile.SYSTEM)
+    val vibrationStrength by settingsManager.vibrationStrength.collectAsState(initial = VibrationStrength.MEDIUM)
+    val isIncognitoMode by settingsManager.isIncognitoMode.collectAsState(initial = false)
     val autoCapitalize by settingsManager.autoCapitalize.collectAsState(initial = true)
     val spellCheckEnabled by settingsManager.spellCheckEnabled.collectAsState(initial = true)
     val oneHandedMode by settingsManager.oneHandedMode.collectAsState(initial = OneHandedMode.FULL)
@@ -824,12 +847,24 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
             }
         }
 
+        PhotoBackgroundThemeCard(settingsManager = settingsManager)
+
+        PersonalShortcutsCard()
+
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Typing & Layout Preferences", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("Typing, Haptics & Layout Preferences", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+
+                SettingToggleRow(
+                    title = "Incognito Private Mode",
+                    subtitle = "Pause local word learning and clipboard logging while enabled",
+                    checked = isIncognitoMode,
+                    onCheckedChange = { scope.launch { settingsManager.setIncognitoMode(it) } },
+                    switchModifier = Modifier.testTag("toggle_incognito_mode")
+                )
 
                 SettingToggleRow(
                     title = "Dedicated Number Row",
@@ -852,12 +887,40 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                     onCheckedChange = { scope.launch { settingsManager.setSpellCheckEnabled(it) } }
                 )
 
+                Text("Vibration Intensity", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    VibrationStrength.entries.forEach { strength ->
+                        FilterChip(
+                            selected = vibrationStrength == strength,
+                            onClick = { scope.launch { settingsManager.setVibrationStrength(strength) } },
+                            label = { Text(strength.label, fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
                 SettingToggleRow(
                     title = "Sound on Keypress",
                     subtitle = "Audible feedback when tapping keys",
                     checked = soundOnKeyPress,
                     onCheckedChange = { scope.launch { settingsManager.setSoundOnKeyPress(it) } }
                 )
+
+                AnimatedVisibility(visible = soundOnKeyPress) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Sound Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SoundProfile.entries.forEach { profile ->
+                                FilterChip(
+                                    selected = soundProfile == profile,
+                                    onClick = { scope.launch { settingsManager.setSoundProfile(profile) } },
+                                    label = { Text(profile.label, fontSize = 11.sp, maxLines = 1) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 SettingToggleRow(
                     title = "Floating Keyboard Mode",
@@ -866,13 +929,13 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                     onCheckedChange = { scope.launch { settingsManager.setFloatingMode(it) } }
                 )
 
-                Text("One-Handed Mode", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("One-Handed & Split Mode", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OneHandedMode.entries.forEach { mode ->
                         FilterChip(
                             selected = oneHandedMode == mode,
                             onClick = { scope.launch { settingsManager.setOneHandedMode(mode) } },
-                            label = { Text(mode.label, fontSize = 12.sp) },
+                            label = { Text(mode.label, fontSize = 11.sp) },
                             modifier = Modifier.weight(1f)
                         )
                     }

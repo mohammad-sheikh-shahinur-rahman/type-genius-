@@ -81,9 +81,10 @@ enum class KeyboardTheme(val id: String, val displayName: String) {
 }
 
 enum class OneHandedMode(val id: String, val label: String) {
-    FULL("full", "Full Width"),
-    LEFT("left", "Left-Handed"),
-    RIGHT("right", "Right-Handed");
+    FULL("full", "Full"),
+    LEFT("left", "Left"),
+    RIGHT("right", "Right"),
+    SPLIT("split", "Split");
 
     companion object {
         fun fromId(id: String): OneHandedMode = entries.find { it.id == id } ?: FULL
@@ -100,6 +101,27 @@ enum class KeyboardHeightPreset(val id: String, val rowHeightDp: Int, val label:
     }
 }
 
+enum class VibrationStrength(val id: String, val label: String, val durationMs: Long, val amplitude: Int) {
+    OFF("off", "Off", 0L, 0),
+    LIGHT("light", "Light", 10L, 60),
+    MEDIUM("medium", "Medium", 18L, 145),
+    STRONG("strong", "Strong", 28L, 235);
+
+    companion object {
+        fun fromId(id: String): VibrationStrength = entries.find { it.id == id } ?: MEDIUM
+    }
+}
+
+enum class SoundProfile(val id: String, val label: String, val volume: Float) {
+    SYSTEM("system", "Standard Click", 0.50f),
+    SOFT("soft", "Soft Tap", 0.25f),
+    MECHANICAL("mechanical", "Mechanical Bold", 0.90f);
+
+    companion object {
+        fun fromId(id: String): SoundProfile = entries.find { it.id == id } ?: SYSTEM
+    }
+}
+
 enum class KeyboardViewMode {
     LETTERS,
     SYMBOLS_1,
@@ -110,6 +132,7 @@ enum class KeyboardViewMode {
     TEXT_EDITOR,
     TRANSLATOR,
     THEME_PICKER,
+    FANCY_FONTS,
     MORE_TOOLS
 }
 

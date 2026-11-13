@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -12,7 +13,9 @@ import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
+import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
+import com.example.model.VibrationStrength
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -40,6 +43,14 @@ class SettingsManager(private val context: Context) {
         val KEY_TRANSLATOR_SRC = stringPreferencesKey("translator_source_lang")
         val KEY_TRANSLATOR_TGT = stringPreferencesKey("translator_target_lang")
         val KEY_GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+        val KEY_WALLPAPER_PATH = stringPreferencesKey("keyboard_wallpaper_path")
+        val KEY_WALLPAPER_DIM_ALPHA = floatPreferencesKey("wallpaper_dim_alpha")
+        val KEY_KEY_BG_ALPHA = floatPreferencesKey("key_bg_alpha")
+        val KEY_INCOGNITO_MODE = booleanPreferencesKey("incognito_mode")
+        val KEY_VIBRATION_STRENGTH = stringPreferencesKey("vibration_strength")
+        val KEY_SOUND_PROFILE = stringPreferencesKey("sound_profile")
+        val KEY_GLIDE_TYPING = booleanPreferencesKey("glide_typing_enabled")
+        val KEY_BACKSPACE_SWIPE = booleanPreferencesKey("backspace_swipe_delete")
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -136,6 +147,38 @@ class SettingsManager(private val context: Context) {
         prefs[KEY_GEMINI_API_KEY] ?: ""
     }
 
+    val wallpaperPath: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WALLPAPER_PATH] ?: ""
+    }
+
+    val wallpaperDimAlpha: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_WALLPAPER_DIM_ALPHA] ?: 0.42f).coerceIn(0f, 0.85f)
+    }
+
+    val keyBackgroundAlpha: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_KEY_BG_ALPHA] ?: 0.78f).coerceIn(0.15f, 1.0f)
+    }
+
+    val isIncognitoMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_INCOGNITO_MODE] ?: false
+    }
+
+    val vibrationStrength: Flow<VibrationStrength> = context.dataStore.data.map { prefs ->
+        VibrationStrength.fromId(prefs[KEY_VIBRATION_STRENGTH] ?: VibrationStrength.MEDIUM.id)
+    }
+
+    val soundProfile: Flow<SoundProfile> = context.dataStore.data.map { prefs ->
+        SoundProfile.fromId(prefs[KEY_SOUND_PROFILE] ?: SoundProfile.SYSTEM.id)
+    }
+
+    val isGlideTypingEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_GLIDE_TYPING] ?: true
+    }
+
+    val isBackspaceSwipeEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BACKSPACE_SWIPE] ?: true
+    }
+
     suspend fun setSpacebarSwipeEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SPACEBAR_SWIPE] = enabled }
     }
@@ -209,5 +252,37 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setGeminiApiKey(key: String) {
         context.dataStore.edit { it[KEY_GEMINI_API_KEY] = key.trim() }
+    }
+
+    suspend fun setWallpaperPath(path: String) {
+        context.dataStore.edit { it[KEY_WALLPAPER_PATH] = path }
+    }
+
+    suspend fun setWallpaperDimAlpha(alpha: Float) {
+        context.dataStore.edit { it[KEY_WALLPAPER_DIM_ALPHA] = alpha.coerceIn(0f, 0.85f) }
+    }
+
+    suspend fun setKeyBackgroundAlpha(alpha: Float) {
+        context.dataStore.edit { it[KEY_KEY_BG_ALPHA] = alpha.coerceIn(0.15f, 1.0f) }
+    }
+
+    suspend fun setIncognitoMode(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_INCOGNITO_MODE] = enabled }
+    }
+
+    suspend fun setVibrationStrength(strength: VibrationStrength) {
+        context.dataStore.edit { it[KEY_VIBRATION_STRENGTH] = strength.id }
+    }
+
+    suspend fun setSoundProfile(profile: SoundProfile) {
+        context.dataStore.edit { it[KEY_SOUND_PROFILE] = profile.id }
+    }
+
+    suspend fun setGlideTypingEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_GLIDE_TYPING] = enabled }
+    }
+
+    suspend fun setBackspaceSwipeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_BACKSPACE_SWIPE] = enabled }
     }
 }

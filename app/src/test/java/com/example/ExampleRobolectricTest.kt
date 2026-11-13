@@ -2,8 +2,10 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.translator.OfflineTranslator
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,5 +62,26 @@ class ExampleRobolectricTest {
 
         val banglishToFa = OfflineTranslator.translateWithMemory(context, "dhonnobad", "banglish", "fa")
         assertTrue(banglishToFa.translatedText.isNotBlank())
+    }
+
+    @Test
+    fun `room v3 personal text shortcuts seed, add, query, and delete offline`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repo = TextShortcutRepository(context)
+
+        repo.ensureSeededDefaults()
+        val gmMatches = repo.findMatchingExpansions("gm")
+        assertTrue("Expected seeded shortcut for 'gm'", gmMatches.any { it.contains("শুভ সকাল") })
+
+        repo.addOrUpdateShortcut("addr", "Zindabazar, Sylhet")
+        val prefixMatches = repo.findMatchingExpansions("add")
+        assertTrue("Expected prefix match for 'add'", prefixMatches.contains("Zindabazar, Sylhet"))
+
+        val all = repo.allShortcuts.first()
+        val added = all.find { it.trigger == "addr" }
+        assertTrue("Expected persisted shortcut in Room DB", added != null)
+        if (added != null) {
+            repo.deleteShortcut(added)
+        }
     }
 }

@@ -1,7 +1,15 @@
 package com.example.ui.keyboard
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,10 +58,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -62,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.data.SettingsManager
+import com.example.data.dictionary.FancyFontStyle
 import com.example.data.local.ClipboardItem
 import com.example.model.KeyAction
 import com.example.model.KeyType
@@ -71,7 +93,11 @@ import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
 import com.example.model.SwipeSensitivity
+import com.example.model.VibrationStrength
 import com.example.service.VoiceInputController
+import java.io.File
+import kotlin.math.hypot
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -90,6 +116,9 @@ fun KeyboardView(
     translatorSourceText: String = "",
     translatorComposingPreview: String = "",
     isTranslatorVoiceActive: Boolean = false,
+    activeFancyStyle: FancyFontStyle = FancyFontStyle.NORMAL,
+    lastTypedWordPreview: String = "",
+    canUndoDelete: Boolean = false,
     onOpenTranslator: () -> Unit = {},
     onCloseTranslator: () -> Unit = {},
     onTranslatorSourceTextChange: (String) -> Unit = {},
@@ -118,17 +147,25 @@ fun KeyboardView(
     onSelectAll: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
+    onDeleteWordBackward: () -> Unit = {},
+    onUndoDelete: () -> Unit = {},
+    onGlideCommitted: (trail: List<Pair<Float, Float>>, keyCenters: Map<String, Pair<Float, Float>>) -> Unit = { _, _ -> },
+    onSelectFancyStyle: (FancyFontStyle) -> Unit = {},
+    onTransformLastWord: (FancyFontStyle) -> Unit = {},
+    onInsertTextSnippet: (String) -> Unit = {},
     voiceController: VoiceInputController? = null,
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
     val context = LocalContext.current
+    val density = LocalDensity.current
     val isSystemDark = isSystemInDarkTheme()
     val coroutineScope = rememberCoroutineScope()
 
     val isSwipeEnabled by settingsManager.isSpacebarSwipeEnabled.collectAsState(initial = true)
     val swipeSensitivity by settingsManager.swipeSensitivity.collectAsState(initial = SwipeSensitivity.MEDIUM)
     val isHapticEnabled by settingsManager.isHapticEnabled.collectAsState(initial = true)
+    val vibrationStrength by settingsManager.vibrationStrength.collectAsState(initial = VibrationStrength.MEDIUM)
     val showLanguageOnSpace by settingsManager.showActiveLanguageOnSpacebar.collectAsState(initial = true)
     val longPressLangPicker by settingsManager.longPressLanguageSelector.collectAsState(initial = true)
     val showAltLangKey by settingsManager.showAlternativeLanguageKey.collectAsState(initial = true)
@@ -140,9 +177,43 @@ fun KeyboardView(
     val translatorSrc by settingsManager.translatorSourceCode.collectAsState(initial = "bn")
     val translatorTgt by settingsManager.translatorTargetCode.collectAsState(initial = "en")
     val geminiApiKey by settingsManager.geminiApiKey.collectAsState(initial = "")
+    val wallpaperPath by settingsManager.wallpaperPath.collectAsState(initial = "")
+    val wallpaperDimAlpha by settingsManager.wallpaperDimAlpha.collectAsState(initial = 0.42f)
+    val keyBackgroundAlpha by settingsManager.keyBackgroundAlpha.collectAsState(initial = 0.78f)
+    val isIncognitoMode by settingsManager.isIncognitoMode.collectAsState(initial = false)
+    val isGlideTypingEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
+    val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
 
-    val colors = remember(currentTheme, isSystemDark) {
+    val wallpaperBitmap = remember(wallpaperPath) {
+        if (wallpaperPath.isNotBlank()) {
+            try {
+                val file = File(wallpaperPath)
+                if (file.exists()) BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() else null
+            } catch (_: Throwable) {
+                null
+            }
+        } else null
+    }
+
+    val baseColors = remember(currentTheme, isSystemDark) {
         KeyboardThemeData.getColors(currentTheme, context, isSystemDark)
+    }
+
+    val colors = remember(baseColors, wallpaperBitmap, keyBackgroundAlpha) {
+        if (wallpaperBitmap != null) {
+            baseColors.copy(
+                background = Color.Transparent,
+                keyBackground = Color(0xFF1F1F24).copy(alpha = keyBackgroundAlpha),
+                keySpecialBackground = Color(0xFF2D2E35).copy(alpha = (keyBackgroundAlpha + 0.08f).coerceAtMost(0.95f)),
+                keyPressedBackground = baseColors.accent.copy(alpha = 0.45f),
+                textPrimary = Color.White,
+                textSecondary = Color(0xFFD6D8E0),
+                suggestionBackground = Color(0xFF121216).copy(alpha = 0.75f),
+                pillKeyBackground = Color(0xFF2D2E35).copy(alpha = (keyBackgroundAlpha + 0.08f).coerceAtMost(0.95f))
+            )
+        } else {
+            baseColors
+        }
     }
 
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -157,8 +228,34 @@ fun KeyboardView(
         }
     }
 
+    val vibrator = remember {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun haptic() {
-        if (isHapticEnabled) {
+        if (!isHapticEnabled || vibrationStrength == VibrationStrength.OFF) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator?.hasVibrator() == true) {
+                vibrator.vibrate(
+                    VibrationEffect.createOneShot(
+                        vibrationStrength.durationMs,
+                        vibrationStrength.amplitude
+                    )
+                )
+            } else {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            }
+        } catch (_: Exception) {
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
@@ -166,7 +263,7 @@ fun KeyboardView(
     val containerAlignment = when (oneHandedMode) {
         OneHandedMode.LEFT -> Alignment.CenterStart
         OneHandedMode.RIGHT -> Alignment.CenterEnd
-        OneHandedMode.FULL -> Alignment.Center
+        OneHandedMode.FULL, OneHandedMode.SPLIT -> Alignment.Center
     }
 
     BoxWithConstraints(
@@ -193,9 +290,11 @@ fun KeyboardView(
     ) {
         val isNarrow = maxWidth < 350.dp
         val isWide = maxWidth >= 600.dp
+        val isSplitMode = oneHandedMode == OneHandedMode.SPLIT
+        val splitGap = if (isWide) 64.dp else 30.dp
         val widthFraction = when {
             floatingMode -> 1f
-            oneHandedMode != OneHandedMode.FULL -> 0.87f
+            oneHandedMode == OneHandedMode.LEFT || oneHandedMode == OneHandedMode.RIGHT -> 0.87f
             else -> 1f
         }
         val responsiveRowHeight = when {
@@ -205,10 +304,24 @@ fun KeyboardView(
         }
         val responsiveGap = if (isNarrow) 3.dp else 4.dp
 
+        if (wallpaperBitmap != null) {
+            Image(
+                bitmap = wallpaperBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = wallpaperDimAlpha))
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth(widthFraction)
-                .widthIn(max = 680.dp)
+                .widthIn(max = if (isWide) 840.dp else 680.dp)
                 .padding(horizontal = 5.dp, vertical = 5.dp)
         ) {
             // 0. Docked Live Translator Overlay above active keyboard (Screenshots 1 & 3)
@@ -262,8 +375,14 @@ fun KeyboardView(
                 isVoiceTypingActive = isVoiceTypingActive,
                 isTranslatorOpen = isTranslatorOpen,
                 isTranslatorVoiceActive = isTranslatorVoiceActive,
+                isIncognitoMode = isIncognitoMode,
+                canUndoDelete = canUndoDelete,
                 voiceController = voiceController,
                 onToggleToolbox = { isToolboxExpanded = !isToolboxExpanded },
+                onToggleIncognito = {
+                    coroutineScope.launch { settingsManager.setIncognitoMode(!isIncognitoMode) }
+                },
+                onUndoDelete = onUndoDelete,
                 onSelectViewMode = { targetMode ->
                     if (targetMode == KeyboardViewMode.TRANSLATOR) {
                         onOpenTranslator()
@@ -403,12 +522,26 @@ fun KeyboardView(
                     )
                 }
 
+                KeyboardViewMode.FANCY_FONTS -> {
+                    FancyFontsPanel(
+                        colors = colors,
+                        activeStyle = activeFancyStyle,
+                        sampleWord = lastTypedWordPreview,
+                        onSelectLiveStyle = onSelectFancyStyle,
+                        onTransformLastWord = onTransformLastWord,
+                        onInsertSnippet = onInsertTextSnippet,
+                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onHaptic = { haptic() }
+                    )
+                }
+
                 KeyboardViewMode.MORE_TOOLS -> {
                     MoreToolsPanel(
                         colors = colors,
                         oneHandedMode = oneHandedMode,
                         heightPreset = heightPreset,
                         floatingMode = floatingMode,
+                        isIncognitoMode = isIncognitoMode,
                         onSelectViewMode = onSelectViewMode,
                         onCycleOneHanded = {
                             val entries = OneHandedMode.entries
@@ -423,6 +556,9 @@ fun KeyboardView(
                         onToggleFloating = {
                             coroutineScope.launch { settingsManager.setFloatingMode(!floatingMode) }
                         },
+                        onToggleIncognito = {
+                            coroutineScope.launch { settingsManager.setIncognitoMode(!isIncognitoMode) }
+                        },
                         onShareApp = onShareApp,
                         onHaptic = { haptic() }
                     )
@@ -432,6 +568,7 @@ fun KeyboardView(
                 KeyboardViewMode.SYMBOLS_1,
                 KeyboardViewMode.SYMBOLS_2 -> {
                     if (numberRowEnabled && viewMode == KeyboardViewMode.LETTERS) {
+                        val nums = KeyboardLayouts.getNumberRow(activeLanguage)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -439,7 +576,8 @@ fun KeyboardView(
                                 .zIndex(2f),
                             horizontalArrangement = Arrangement.spacedBy(responsiveGap)
                         ) {
-                            KeyboardLayouts.getNumberRow(activeLanguage).forEach { key ->
+                            val numSplit = if (isSplitMode) nums.size / 2 else nums.size
+                            nums.take(numSplit).forEach { key ->
                                 KeyView(
                                     keyAction = key,
                                     colors = colors,
@@ -454,6 +592,24 @@ fun KeyboardView(
                                     }
                                 )
                             }
+                            if (isSplitMode) {
+                                Spacer(modifier = Modifier.width(splitGap))
+                                nums.drop(numSplit).forEach { key ->
+                                    KeyView(
+                                        keyAction = key,
+                                        colors = colors,
+                                        modifier = Modifier.weight(key.weight),
+                                        onClick = {
+                                            haptic()
+                                            onKeyAction(key)
+                                        },
+                                        onLongClick = { secondaryChar ->
+                                            haptic()
+                                            onKeyAction(KeyAction(secondaryChar, null, KeyType.CHARACTER))
+                                        }
+                                    )
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(3.dp))
                     }
@@ -466,34 +622,142 @@ fun KeyboardView(
                     }
 
                     var activePopupRow by remember { mutableStateOf(-1) }
+                    val keyCenters = remember(activeLanguage, viewMode, isSplitMode, isShifted, isCapsLock) {
+                        mutableMapOf<String, Pair<Float, Float>>()
+                    }
+                    var rowsOriginInRoot by remember { mutableStateOf(Offset.Zero) }
+                    var glideTrail by remember { mutableStateOf<List<Offset>>(emptyList()) }
+                    val glideActivationPx = with(density) { 26.dp.toPx() }
 
-                    rows.forEachIndexed { rowIndex, rowKeys ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(responsiveRowHeight)
-                                .zIndex(if (activePopupRow == rowIndex) 50f else 1f)
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(responsiveGap)
-                        ) {
-                            rowKeys.forEach { key ->
-                                val isShiftActive = key.type == KeyType.SHIFT && (isShifted || isCapsLock)
-                                KeyView(
-                                    keyAction = key,
-                                    colors = colors,
-                                    isHighlight = isShiftActive,
-                                    modifier = Modifier.weight(key.weight),
-                                    onClick = {
-                                        haptic()
-                                        onKeyAction(key)
-                                    },
-                                    onLongClick = { secondaryChar ->
-                                        haptic()
-                                        onKeyAction(KeyAction(secondaryChar, null, KeyType.CHARACTER))
-                                    },
-                                    onPopupStateChange = { visible ->
-                                        activePopupRow = if (visible) rowIndex else if (activePopupRow == rowIndex) -1 else activePopupRow
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                rowsOriginInRoot = coords.positionInRoot()
+                            }
+                            .pointerInput(isGlideTypingEnabled, viewMode, activeLanguage) {
+                                if (!isGlideTypingEnabled || viewMode != KeyboardViewMode.LETTERS) return@pointerInput
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                    val localTrail = mutableListOf(down.position)
+                                    var totalDist = 0f
+                                    var isGlideGesture = false
+
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        if (!change.pressed) break
+
+                                        val prev = localTrail.last()
+                                        val stepDist = hypot(change.position.x - prev.x, change.position.y - prev.y)
+                                        if (stepDist > 4f) {
+                                            totalDist += stepDist
+                                            localTrail.add(change.position)
+                                            if (totalDist > glideActivationPx) {
+                                                isGlideGesture = true
+                                                glideTrail = localTrail.toList()
+                                            }
+                                        }
                                     }
+
+                                    if (isGlideGesture && localTrail.size >= 3) {
+                                        haptic()
+                                        onGlideCommitted(
+                                            localTrail.map { it.x to it.y },
+                                            keyCenters.toMap()
+                                        )
+                                    }
+                                    glideTrail = emptyList()
+                                }
+                            }
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            rows.forEachIndexed { rowIndex, rowKeys ->
+                                val splitAt = if (isSplitMode) (rowKeys.size + 1) / 2 else rowKeys.size
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(responsiveRowHeight)
+                                        .zIndex(if (activePopupRow == rowIndex) 50f else 1f)
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(responsiveGap)
+                                ) {
+                                    @Composable
+                                    fun renderKey(key: KeyAction) {
+                                        val isShiftActive = key.type == KeyType.SHIFT && (isShifted || isCapsLock)
+                                        KeyView(
+                                            keyAction = key,
+                                            colors = colors,
+                                            isHighlight = isShiftActive,
+                                            modifier = Modifier
+                                                .weight(key.weight)
+                                                .then(
+                                                    if (viewMode == KeyboardViewMode.LETTERS && key.type == KeyType.CHARACTER && key.label.length == 1) {
+                                                        Modifier.onGloballyPositioned { coords ->
+                                                            val pos = coords.positionInRoot()
+                                                            val cx = pos.x + coords.size.width / 2f - rowsOriginInRoot.x
+                                                            val cy = pos.y + coords.size.height / 2f - rowsOriginInRoot.y
+                                                            keyCenters[key.label] = cx to cy
+                                                        }
+                                                    } else Modifier
+                                                ),
+                                            onClick = {
+                                                haptic()
+                                                onKeyAction(key)
+                                            },
+                                            onLongClick = { secondaryChar ->
+                                                haptic()
+                                                onKeyAction(KeyAction(secondaryChar, null, KeyType.CHARACTER))
+                                            },
+                                            onBackspaceRepeat = if (key.type == KeyType.BACKSPACE) {
+                                                {
+                                                    haptic()
+                                                    onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE))
+                                                }
+                                            } else null,
+                                            onBackspaceSwipeWord = if (key.type == KeyType.BACKSPACE && isBackspaceSwipeEnabled) {
+                                                {
+                                                    haptic()
+                                                    onDeleteWordBackward()
+                                                }
+                                            } else null,
+                                            onPopupStateChange = { visible ->
+                                                activePopupRow = if (visible) rowIndex else if (activePopupRow == rowIndex) -1 else activePopupRow
+                                            }
+                                        )
+                                    }
+
+                                    rowKeys.take(splitAt).forEach { renderKey(it) }
+                                    if (isSplitMode && splitAt < rowKeys.size) {
+                                        Spacer(modifier = Modifier.width(splitGap))
+                                        rowKeys.drop(splitAt).forEach { renderKey(it) }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (glideTrail.size >= 2) {
+                            Canvas(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .zIndex(60f)
+                            ) {
+                                val path = Path().apply {
+                                    moveTo(glideTrail.first().x, glideTrail.first().y)
+                                    for (i in 1 until glideTrail.size) {
+                                        lineTo(glideTrail[i].x, glideTrail[i].y)
+                                    }
+                                }
+                                drawPath(
+                                    path = path,
+                                    brush = Brush.linearGradient(
+                                        listOf(colors.accent.copy(alpha = 0.55f), colors.accent)
+                                    ),
+                                    style = Stroke(
+                                        width = 12f,
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round
+                                    )
                                 )
                             }
                         }
@@ -611,8 +875,33 @@ fun KeyboardView(
                             onLongPressLanguagePicker = {
                                 showLanguageDialog = true
                             },
-                            modifier = Modifier.weight(3.2f)
+                            modifier = Modifier.weight(if (isSplitMode) 1.6f else 3.2f)
                         )
+
+                        if (isSplitMode) {
+                            Spacer(modifier = Modifier.width(splitGap))
+                            SpacebarComponent(
+                                activeLanguage = activeLanguage,
+                                enabledLanguages = enabledLanguages,
+                                isSwipeEnabled = isSwipeEnabled,
+                                swipeSensitivity = swipeSensitivity,
+                                isHapticEnabled = isHapticEnabled,
+                                showLanguageLabel = false,
+                                isLongPressEnabled = longPressLangPicker,
+                                backgroundColor = colors.keyBackground,
+                                textColor = colors.textPrimary,
+                                accentColor = colors.accent,
+                                onTapSpace = {
+                                    onKeyAction(KeyAction(" ", null, KeyType.SPACEBAR))
+                                },
+                                onSwipeNextLanguage = onSwipeNextLanguage,
+                                onSwipePrevLanguage = onSwipePrevLanguage,
+                                onLongPressLanguagePicker = {
+                                    showLanguageDialog = true
+                                },
+                                modifier = Modifier.weight(1.6f)
+                            )
+                        }
 
                         val punctuationChar = when (activeLanguage) {
                             LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL,
@@ -800,12 +1089,17 @@ fun KeyView(
     customBgColor: Color? = null,
     onClick: () -> Unit,
     onLongClick: ((String) -> Unit)? = null,
+    onBackspaceRepeat: (() -> Unit)? = null,
+    onBackspaceSwipeWord: (() -> Unit)? = null,
     onPopupStateChange: ((Boolean) -> Unit)? = null
 ) {
     val view = LocalView.current
+    val density = LocalDensity.current
     var isPressed by remember { mutableStateOf(false) }
     var showPreviewPopup by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val dragAwayThresholdPx = with(density) { 18.dp.toPx() }
+    val swipeDeleteStepPx = with(density) { 30.dp.toPx() }
 
     val bg = when {
         isEnterKey -> colors.enterKeyBackground
@@ -834,18 +1128,30 @@ fun KeyView(
                     keyAction.label
                 }
             }
-            .pointerInput(keyAction) {
+            .pointerInput(keyAction, onBackspaceSwipeWord != null, onBackspaceRepeat != null) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     isPressed = true
                     var isLongClickFired = false
+                    var draggedAway = false
+                    var swipeDeleteConsumed = false
+                    var lastSwipeX = down.position.x
                     val longPressTimeoutMs = 280L
 
                     var job: kotlinx.coroutines.Job? = null
-                    if (keyAction.secondaryLabel != null && onLongClick != null) {
+                    if (keyAction.type == KeyType.BACKSPACE && onBackspaceRepeat != null) {
                         job = coroutineScope.launch {
-                            kotlinx.coroutines.delay(longPressTimeoutMs)
-                            if (isPressed) {
+                            delay(360L)
+                            while (isPressed && !swipeDeleteConsumed) {
+                                isLongClickFired = true
+                                onBackspaceRepeat()
+                                delay(70L)
+                            }
+                        }
+                    } else if (keyAction.secondaryLabel != null && onLongClick != null) {
+                        job = coroutineScope.launch {
+                            delay(longPressTimeoutMs)
+                            if (isPressed && !draggedAway) {
                                 isLongClickFired = true
                                 showPreviewPopup = true
                                 onPopupStateChange?.invoke(true)
@@ -860,13 +1166,39 @@ fun KeyView(
 
                         if (!change.pressed) {
                             job?.cancel()
-                            if (isLongClickFired && keyAction.secondaryLabel != null) {
-                                onLongClick?.invoke(keyAction.secondaryLabel)
-                            } else {
-                                onClick()
+                            if (!draggedAway && !swipeDeleteConsumed) {
+                                if (isLongClickFired && keyAction.secondaryLabel != null) {
+                                    onLongClick?.invoke(keyAction.secondaryLabel)
+                                } else if (!isLongClickFired) {
+                                    onClick()
+                                }
                             }
                             change.consume()
                             break
+                        }
+
+                        if (keyAction.type == KeyType.BACKSPACE && onBackspaceSwipeWord != null) {
+                            val dx = change.position.x - lastSwipeX
+                            if (dx <= -swipeDeleteStepPx) {
+                                swipeDeleteConsumed = true
+                                job?.cancel()
+                                lastSwipeX = change.position.x
+                                onBackspaceSwipeWord()
+                            }
+                        } else if (keyAction.type == KeyType.CHARACTER) {
+                            val dist = hypot(
+                                change.position.x - down.position.x,
+                                change.position.y - down.position.y
+                            )
+                            if (dist > dragAwayThresholdPx) {
+                                draggedAway = true
+                                isPressed = false
+                                job?.cancel()
+                                if (showPreviewPopup) {
+                                    showPreviewPopup = false
+                                    onPopupStateChange?.invoke(false)
+                                }
+                            }
                         }
                     }
 

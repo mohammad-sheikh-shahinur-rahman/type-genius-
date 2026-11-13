@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.GridView
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -54,10 +56,14 @@ fun KeyboardTopBar(
     isVoiceTypingActive: Boolean,
     isTranslatorOpen: Boolean = false,
     isTranslatorVoiceActive: Boolean = false,
+    isIncognitoMode: Boolean = false,
+    canUndoDelete: Boolean = false,
     voiceController: VoiceInputController?,
     onToggleToolbox: () -> Unit,
     onSelectViewMode: (KeyboardViewMode) -> Unit,
     onToggleTranslator: () -> Unit = { onSelectViewMode(KeyboardViewMode.TRANSLATOR) },
+    onToggleIncognito: () -> Unit = {},
+    onUndoDelete: () -> Unit = {},
     onSuggestionClick: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onStartVoiceTyping: () -> Unit,
@@ -392,6 +398,43 @@ fun KeyboardTopBar(
                 }
 
                 ToolboxIconItem(
+                    active = viewMode == KeyboardViewMode.FANCY_FONTS,
+                    accent = colors.accent,
+                    modifier = Modifier.testTag("toolbox_fonts"),
+                    onClick = {
+                        onHaptic()
+                        onSelectViewMode(
+                            if (viewMode == KeyboardViewMode.FANCY_FONTS) KeyboardViewMode.LETTERS
+                            else KeyboardViewMode.FANCY_FONTS
+                        )
+                    }
+                ) {
+                    Text(
+                        text = "Aa",
+                        color = if (viewMode == KeyboardViewMode.FANCY_FONTS) colors.accent else colors.textPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                ToolboxIconItem(
+                    active = isIncognitoMode,
+                    accent = Color(0xFF9C27B0),
+                    modifier = Modifier.testTag("toolbox_incognito"),
+                    onClick = {
+                        onHaptic()
+                        onToggleIncognito()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VisibilityOff,
+                        contentDescription = if (isIncognitoMode) "Disable Incognito Mode" else "Enable Incognito Mode",
+                        tint = if (isIncognitoMode) Color(0xFFE040FB) else colors.textPrimary,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                ToolboxIconItem(
                     active = false,
                     accent = colors.accent,
                     modifier = Modifier.testTag("toolbox_toggle_button"),
@@ -435,6 +478,59 @@ fun KeyboardTopBar(
                     contentAlignment = Alignment.Center
                 ) {
                     Text("T", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (isIncognitoMode) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF7B1FA2).copy(alpha = 0.25f))
+                            .clickable {
+                                onHaptic()
+                                onToggleIncognito()
+                            }
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .testTag("incognito_status_pill"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VisibilityOff,
+                            contentDescription = "Incognito Active",
+                            tint = Color(0xFFE040FB),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(3.dp))
+                }
+
+                if (canUndoDelete) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colors.accent.copy(alpha = 0.18f))
+                            .clickable {
+                                onHaptic()
+                                onUndoDelete()
+                            }
+                            .padding(horizontal = 7.dp, vertical = 4.dp)
+                            .testTag("undo_swipe_delete_chip"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Undo deleted word",
+                            tint = colors.accent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Undo",
+                            color = colors.accent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 displayCandidates.forEachIndexed { index, candidate ->

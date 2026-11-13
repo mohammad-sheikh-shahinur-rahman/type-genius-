@@ -44,6 +44,14 @@ data class TranslationMemoryEntry(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "text_shortcuts")
+data class TextShortcut(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trigger: String,
+    val expansion: String,
+    val language: String = "all"
+)
+
 @Dao
 interface WordDao {
     @Query("SELECT * FROM learned_words WHERE language = :lang ORDER BY frequency DESC, lastUsed DESC LIMIT :limit")
@@ -107,15 +115,40 @@ interface TranslationMemoryDao {
     suspend fun clearUnpinned()
 }
 
+@Dao
+interface ShortcutDao {
+    @Query("SELECT * FROM text_shortcuts ORDER BY trigger ASC")
+    fun observeAll(): Flow<List<TextShortcut>>
+
+    @Query("SELECT * FROM text_shortcuts WHERE LOWER(trigger) = LOWER(:trigger) LIMIT 3")
+    suspend fun findExact(trigger: String): List<TextShortcut>
+
+    @Query("SELECT * FROM text_shortcuts WHERE LOWER(trigger) LIKE LOWER(:prefix) || '%' ORDER BY trigger ASC LIMIT 4")
+    suspend fun searchPrefix(prefix: String): List<TextShortcut>
+
+    @Query("SELECT COUNT(*) FROM text_shortcuts")
+    suspend fun countAll(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(shortcut: TextShortcut): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(shortcuts: List<TextShortcut>)
+
+    @Delete
+    suspend fun delete(shortcut: TextShortcut)
+}
+
 @Database(
-    entities = [LearnedWord::class, ClipboardItem::class, TranslationMemoryEntry::class],
-    version = 2,
+    entities = [LearnedWord::class, ClipboardItem::class, TranslationMemoryEntry::class, TextShortcut::class],
+    version = 3,
     exportSchema = false
 )
 abstract class TypeGeniusDatabase : RoomDatabase() {
     abstract fun wordDao(): WordDao
     abstract fun clipboardDao(): ClipboardDao
     abstract fun translationMemoryDao(): TranslationMemoryDao
+    abstract fun shortcutDao(): ShortcutDao
 
     companion object {
         @Volatile
