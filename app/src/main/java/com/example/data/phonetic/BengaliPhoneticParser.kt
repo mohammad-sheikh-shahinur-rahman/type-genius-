@@ -587,9 +587,13 @@ object BengaliPhoneticParser {
                 continue
             }
 
-            // Explicit Z -> য-ফলা after consonant
-            if (sub1 == "Z" && isAfterConsonant) {
-                sb.append("\u09CD\u09AF")
+            // Explicit Z -> য-ফলা after consonant, or য at word start
+            if (sub1 == "Z") {
+                if (isAfterConsonant) {
+                    sb.append("\u09CD\u09AF")
+                } else {
+                    sb.append("য")
+                }
                 i += 1
                 isAfterConsonant = true
                 continue

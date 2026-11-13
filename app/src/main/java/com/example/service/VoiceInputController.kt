@@ -24,6 +24,12 @@ class VoiceInputController(private val context: Context) {
     var isListening by mutableStateOf(false)
         private set
 
+    var isSessionDesiredState by mutableStateOf(false)
+        private set
+
+    val isSessionActive: Boolean
+        get() = isListening || isSessionDesiredState
+
     var isProcessing by mutableStateOf(false)
         private set
 
@@ -45,7 +51,8 @@ class VoiceInputController(private val context: Context) {
     private var speechRecognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isSessionDesired = false
-    private var silentCycleCount = 0
+    private var hardErrorStreak = 0
+    private var lastCyclePartial = ""
     private var activeLanguageCode = "bn"
     private var activeOnPermissionRequired: () -> Unit = {}
     private var activeOnTextRecognized: (String) -> Unit = {}
@@ -59,6 +66,9 @@ class VoiceInputController(private val context: Context) {
 
     fun toggleContinuousMode() {
         continuousMode = !continuousMode
+        if (isSessionDesired) {
+            statusText = if (continuousMode) "Listening continuously (1-tap)" else "Listening..."
+        }
     }
 
     fun toggleListening(
@@ -82,7 +92,9 @@ class VoiceInputController(private val context: Context) {
         activeOnPermissionRequired = onPermissionRequired
         activeOnTextRecognized = onTextRecognized
         isSessionDesired = true
-        silentCycleCount = 0
+        isSessionDesiredState = true
+        hardErrorStreak = 0
+        lastCyclePartial = ""
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.post { launchRecognizerCycle() }
     }
@@ -97,17 +109,36 @@ class VoiceInputController(private val context: Context) {
         }, delayMs)
     }
 
+    private fun teardownRecognizer() {
+        runCatching {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        }
+        speechRecognizer = null
+    }
+
+    private fun flushPartialIfUncommitted() {
+        val pending = lastCyclePartial.trim()
+        if (pending.isNotEmpty()) {
+            lastCyclePartial = ""
+            partialText = ""
+            activeOnTextRecognized(pending)
+        }
+    }
+
     private fun launchRecognizerCycle() {
         if (!isSessionDesired) return
 
         if (!hasAudioPermission()) {
             isSessionDesired = false
+            isSessionDesiredState = false
             permissionMissing = true
             isListening = false
             isProcessing = false
             hasError = true
             rmsLevel = 0f
             partialText = ""
+            lastCyclePartial = ""
             statusText = "Allow Microphone Permission"
             activeOnPermissionRequired()
             return
@@ -115,10 +146,12 @@ class VoiceInputController(private val context: Context) {
         permissionMissing = false
         hasError = false
         partialText = ""
+        lastCyclePartial = ""
         rmsLevel = 0f
 
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             isSessionDesired = false
+            isSessionDesiredState = false
             statusText = "Voice input unavailable on device"
             isListening = false
             isProcessing = false
@@ -127,7 +160,7 @@ class VoiceInputController(private val context: Context) {
         }
 
         try {
-            speechRecognizer?.destroy()
+            teardownRecognizer()
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
@@ -139,7 +172,7 @@ class VoiceInputController(private val context: Context) {
                     }
 
                     override fun onBeginningOfSpeech() {
-                        silentCycleCount = 0
+                        hardErrorStreak = 0
                         isProcessing = false
                         statusText = "Listening..."
                     }
@@ -159,29 +192,55 @@ class VoiceInputController(private val context: Context) {
 
                     override fun onError(error: Int) {
                         val isPermissionError = error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
-                        val isTransientEmpty = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                        val isSilentOrIdleError = error == SpeechRecognizer.ERROR_NO_MATCH ||
                             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
                             error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
                             error == SpeechRecognizer.ERROR_CLIENT
+                        val isRecoverableSystemError = error == SpeechRecognizer.ERROR_AUDIO ||
+                            error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
+                            error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
+                            error == SpeechRecognizer.ERROR_NETWORK
 
-                        if (!isPermissionError && isSessionDesired && continuousMode && isTransientEmpty && silentCycleCount < 12) {
-                            silentCycleCount++
-                            isListening = true
-                            isProcessing = false
-                            hasError = false
-                            rmsLevel = 0f
-                            partialText = ""
-                            statusText = "Listening continuously..."
-                            scheduleNextCycle(if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) 320L else 180L)
-                            return
+                        if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                            flushPartialIfUncommitted()
+                        } else {
+                            lastCyclePartial = ""
+                        }
+
+                        if (!isPermissionError && isSessionDesired && continuousMode) {
+                            if (isSilentOrIdleError) {
+                                hardErrorStreak = 0
+                                isListening = true
+                                isProcessing = false
+                                hasError = false
+                                rmsLevel = 0f
+                                partialText = ""
+                                statusText = "Listening continuously..."
+                                val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) 380L else 240L
+                                scheduleNextCycle(delay)
+                                return
+                            }
+                            if (isRecoverableSystemError && hardErrorStreak < 6) {
+                                hardErrorStreak++
+                                isListening = true
+                                isProcessing = false
+                                hasError = false
+                                rmsLevel = 0f
+                                partialText = ""
+                                statusText = "Reconnecting mic..."
+                                scheduleNextCycle(520L)
+                                return
+                            }
                         }
 
                         isSessionDesired = false
+                        isSessionDesiredState = false
                         isListening = false
                         isProcessing = false
                         rmsLevel = 0f
                         hasError = true
                         partialText = ""
+                        lastCyclePartial = ""
                         statusText = when (error) {
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                                 permissionMissing = true
@@ -198,8 +257,11 @@ class VoiceInputController(private val context: Context) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val committed = matches?.firstOrNull()?.trim().orEmpty()
                         if (committed.isNotEmpty()) {
-                            silentCycleCount = 0
+                            hardErrorStreak = 0
+                            lastCyclePartial = ""
                             activeOnTextRecognized(committed)
+                        } else {
+                            flushPartialIfUncommitted()
                         }
                         isProcessing = false
                         hasError = false
@@ -209,9 +271,10 @@ class VoiceInputController(private val context: Context) {
                         if (isSessionDesired && continuousMode) {
                             isListening = true
                             statusText = "Listening continuously..."
-                            scheduleNextCycle(180L)
+                            scheduleNextCycle(260L)
                         } else {
                             isSessionDesired = false
+                            isSessionDesiredState = false
                             isListening = false
                             statusText = if (committed.isNotEmpty()) "Tap mic to speak more" else "Tap mic to speak"
                         }
@@ -221,7 +284,8 @@ class VoiceInputController(private val context: Context) {
                         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val partial = matches?.firstOrNull()?.trim().orEmpty()
                         if (partial.isNotEmpty()) {
-                            silentCycleCount = 0
+                            hardErrorStreak = 0
+                            lastCyclePartial = partial
                             partialText = partial
                             statusText = partial
                         }
@@ -238,8 +302,9 @@ class VoiceInputController(private val context: Context) {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2200L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 12000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2800L)
             }
 
             speechRecognizer?.startListening(intent)
@@ -248,20 +313,29 @@ class VoiceInputController(private val context: Context) {
             statusText = if (continuousMode) "Listening continuously..." else "Speak now"
         } catch (_: SecurityException) {
             isSessionDesired = false
+            isSessionDesiredState = false
             permissionMissing = true
             isListening = false
             isProcessing = false
             hasError = true
             rmsLevel = 0f
+            lastCyclePartial = ""
             statusText = "Allow Microphone Permission"
             activeOnPermissionRequired()
         } catch (_: Exception) {
-            isSessionDesired = false
-            isListening = false
-            isProcessing = false
-            hasError = true
-            rmsLevel = 0f
-            statusText = "Tap mic to speak again"
+            if (isSessionDesired && continuousMode && hardErrorStreak < 4) {
+                hardErrorStreak++
+                scheduleNextCycle(450L)
+            } else {
+                isSessionDesired = false
+                isSessionDesiredState = false
+                isListening = false
+                isProcessing = false
+                hasError = true
+                rmsLevel = 0f
+                lastCyclePartial = ""
+                statusText = "Tap mic to speak again"
+            }
         }
     }
 
@@ -287,18 +361,17 @@ class VoiceInputController(private val context: Context) {
 
     fun stopListening() {
         isSessionDesired = false
+        isSessionDesiredState = false
+        flushPartialIfUncommitted()
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.post {
-            try {
-                speechRecognizer?.stopListening()
-                speechRecognizer?.destroy()
-                speechRecognizer = null
-            } catch (_: Exception) {}
+            teardownRecognizer()
             isListening = false
             isProcessing = false
             hasError = false
             rmsLevel = 0f
             partialText = ""
+            lastCyclePartial = ""
             statusText = "Speak now"
         }
     }

@@ -97,13 +97,13 @@ object OfflineGlideEngine {
         if (languageId == LanguageId.BANGLA_PHONETIC && topRaw.isNotEmpty()) {
             val mapped = mutableListOf<String>()
             for (latin in topRaw) {
-                if (latin in banglishGlideWords) {
-                    BengaliPhoneticParser.parsePhonetic(latin).firstOrNull()?.let { mapped.add(it) }
+                val bn = BengaliPhoneticParser.parsePhonetic(latin).firstOrNull { cand ->
+                    cand.any { it in '\u0980'..'\u09FF' }
+                } ?: BengaliPhoneticParser.parsePhonetic(latin).firstOrNull()
+                if (bn != null) {
+                    mapped.add(bn)
                 } else {
                     mapped.add(latin)
-                    BengaliPhoneticParser.parsePhonetic(latin).firstOrNull()?.let {
-                        if (it != latin) mapped.add(it)
-                    }
                 }
             }
             return mapped.distinct().take(limit)

@@ -177,4 +177,20 @@ class ExampleRobolectricTest {
         assertFalse("Expected pack file removed after delete", packFile.exists())
         assertFalse(settings.downloadedTranslatorPacks.first().contains("ta"))
     }
+
+    @Test
+    fun `key sound engine singleton plays without crash and voice controller defaults to continuous 1-tap mode`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val soundEngine = com.example.service.KeySoundEngine.getInstance(context)
+        com.example.model.SoundProfile.entries.forEach { profile ->
+            soundEngine.play(profile, com.example.model.KeyType.CHARACTER)
+            soundEngine.play(profile, com.example.model.KeyType.SPACEBAR)
+            soundEngine.play(profile, com.example.model.KeyType.ENTER)
+        }
+
+        val voiceController = com.example.service.VoiceInputController(context)
+        assertTrue("Continuous mode should be ON by default for 1-tap voice typing", voiceController.continuousMode)
+        assertFalse(voiceController.isSessionActive)
+        voiceController.destroy()
+    }
 }

@@ -280,6 +280,11 @@ fun KeyboardView(
     var isVoiceTypingActive by remember { mutableStateOf(false) }
     var isToolboxExpanded by remember { mutableStateOf(true) }
 
+    val controllerSessionActive = voiceController?.isSessionActive == true
+    LaunchedEffect(controllerSessionActive) {
+        isVoiceTypingActive = controllerSessionActive
+    }
+
     // Cross-zone Drag & Drop state between Top Bar and More Tools Panel
     var rootOriginInRoot by remember { mutableStateOf(Offset.Zero) }
     var topBarBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
@@ -547,6 +552,9 @@ fun KeyboardView(
                 onStartVoiceTyping = {
                     if (isTranslatorOpen) {
                         onTranslatorToggleVoice(translatorSrc)
+                    } else if (voiceController?.isSessionActive == true) {
+                        voiceController.stopListening()
+                        isVoiceTypingActive = false
                     } else {
                         isVoiceTypingActive = true
                         voiceController?.startListening(
@@ -587,6 +595,7 @@ fun KeyboardView(
                                 onKeyAction(KeyAction("$styled ", null, KeyType.CHARACTER))
                             }
                         }
+                        isVoiceTypingActive = voiceController?.isSessionActive == true
                     }
                 },
                 onHaptic = { haptic() }
@@ -885,7 +894,7 @@ fun KeyboardView(
                     }
                     var rowsOriginInRoot by remember { mutableStateOf(Offset.Zero) }
                     var glideTrail by remember { mutableStateOf<List<Offset>>(emptyList()) }
-                    val glideActivationPx = with(density) { 26.dp.toPx() }
+                    val glideActivationPx = with(density) { 42.dp.toPx() }
 
                     Box(
                         modifier = Modifier

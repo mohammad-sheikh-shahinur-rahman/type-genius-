@@ -1192,9 +1192,14 @@ fun GeneralSettingsScreen(
 
                     SettingToggleRow(
                         title = "Sound on Keypress",
-                        subtitle = "Audible feedback when tapping keys",
+                        subtitle = "Crisp SoundPool audio feedback on key tap (works even if system touch sound is off)",
                         checked = soundOnKeyPress,
-                        onCheckedChange = { scope.launch { settingsManager.setSoundOnKeyPress(it) } }
+                        onCheckedChange = { enabled ->
+                            scope.launch { settingsManager.setSoundOnKeyPress(enabled) }
+                            if (enabled) {
+                                com.example.service.KeySoundEngine.preview(context, soundProfile)
+                            }
+                        }
                     )
 
                     AnimatedVisibility(visible = soundOnKeyPress) {

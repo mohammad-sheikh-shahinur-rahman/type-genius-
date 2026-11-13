@@ -177,16 +177,22 @@ class DictionaryManager(context: Context) {
 
         val clean = input.trim()
 
-        // For Bengali Phonetic mode:
+        // For Bengali Phonetic mode: always keep instant Avro Bengali output ahead of raw ASCII
         if (languageId == LanguageId.BANGLA_PHONETIC) {
             val phoneticSuggestions = BengaliPhoneticParser.parsePhonetic(clean)
-            val learned = try {
+            val learnedBengali = try {
                 wordDao.searchPrefix("bn_phonetic", phoneticSuggestions.firstOrNull() ?: clean, 3)
                     .map { it.word }
+                    .filter { word -> word.any { it in '\u0980'..'\u09FF' } }
             } catch (_: Exception) {
                 emptyList()
             }
-            return@withContext (learned + phoneticSuggestions).distinct().take(6)
+            val primaryPhonetic = phoneticSuggestions.firstOrNull { word -> word.any { it in '\u0980'..'\u09FF' } }
+            return@withContext buildList {
+                if (primaryPhonetic != null) add(primaryPhonetic)
+                addAll(learnedBengali)
+                addAll(phoneticSuggestions)
+            }.distinct().take(6)
         }
 
         val results = mutableListOf<String>()

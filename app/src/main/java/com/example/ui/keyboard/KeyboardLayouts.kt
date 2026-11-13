@@ -41,7 +41,8 @@ object KeyboardLayouts {
             LanguageId.BANGLA_UNIBIJOY -> getBengaliUnibijoyRows(isShifted)
             LanguageId.SYLHETI -> getSylhetiRows(isShifted)
             LanguageId.ASSAMESE -> getAssameseRows(isShifted)
-            LanguageId.BANGLA_PHONETIC, LanguageId.ENGLISH, LanguageId.ENGLISH_UK,
+            LanguageId.BANGLA_PHONETIC -> getBengaliAvroPhoneticRows(isShifted)
+            LanguageId.ENGLISH, LanguageId.ENGLISH_UK,
             LanguageId.INDONESIAN, LanguageId.MALAY -> getLatinQwertyRows(isShifted)
             LanguageId.SPANISH -> getSpanishRows(isShifted)
             LanguageId.FRENCH -> getFrenchRows(isShifted)
@@ -222,6 +223,55 @@ object KeyboardLayouts {
             buildList {
                 add(KeyAction("⇧", null, KeyType.SHIFT, weight = 1.3f))
                 addAll(row3.map { (c, s) -> toKey(c, s) })
+                add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.3f))
+            }
+        )
+    }
+
+    private fun getBengaliAvroPhoneticRows(isShifted: Boolean): List<List<KeyAction>> {
+        val avroHintsLower = mapOf(
+            "q" to "ক", "w" to "ও", "e" to "এ", "r" to "র", "t" to "ত",
+            "y" to "য়", "u" to "উ", "i" to "ই", "o" to "অ", "p" to "প",
+            "a" to "আ", "s" to "স", "d" to "দ", "f" to "ফ", "g" to "গ",
+            "h" to "হ", "j" to "জ", "k" to "ক", "l" to "ল",
+            "z" to "য", "x" to "ক্স", "c" to "চ", "v" to "ভ", "b" to "ব",
+            "n" to "ন", "m" to "ম"
+        )
+        val avroHintsUpper = mapOf(
+            "Q" to "ক", "W" to "ও", "E" to "এ", "R" to "ড়", "T" to "ট",
+            "Y" to "য়", "U" to "ঊ", "I" to "ঈ", "O" to "ও", "P" to "প",
+            "A" to "আ", "S" to "ষ", "D" to "ড", "F" to "ফ", "G" to "গ",
+            "H" to "হ", "J" to "জ", "K" to "ক", "L" to "ল",
+            "Z" to "য", "X" to "ক্স", "C" to "চ", "V" to "ভ", "B" to "ব",
+            "N" to "ণ", "M" to "ম"
+        )
+        val row1 = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+        val row2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+        val row3 = listOf("z", "x", "c", "v", "b", "n", "m")
+
+        fun toAvroKey(base: String): KeyAction {
+            val primary = if (isShifted) base.uppercase() else base
+            val hint = if (isShifted) avroHintsUpper[primary] else avroHintsLower[primary]
+            val altChar = if (isShifted) base.lowercase() else base.uppercase()
+            val variants = when (base) {
+                "c" -> listOfNotNull("Copy", altChar)
+                "v" -> listOfNotNull("Paste", altChar)
+                else -> listOfNotNull(altChar)
+            }
+            return KeyAction(
+                label = primary,
+                secondaryLabel = hint,
+                type = KeyType.CHARACTER,
+                extraVariants = variants
+            )
+        }
+
+        return listOf(
+            row1.map(::toAvroKey),
+            row2.map(::toAvroKey),
+            buildList {
+                add(KeyAction("⇧", null, KeyType.SHIFT, weight = 1.3f))
+                addAll(row3.map(::toAvroKey))
                 add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.3f))
             }
         )

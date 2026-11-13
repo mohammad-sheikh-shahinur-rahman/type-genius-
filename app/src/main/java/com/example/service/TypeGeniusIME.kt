@@ -130,6 +130,8 @@ class TypeGeniusIME : InputMethodService(),
 
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
 
+    private var hasInitializedLanguage = false
+
     override fun onCreate() {
         super.onCreate()
         savedStateRegistryController.performRestore(null)
@@ -140,7 +142,7 @@ class TypeGeniusIME : InputMethodService(),
         shortcutRepository = TextShortcutRepository(this)
         database = TypeGeniusDatabase.getDatabase(this)
         voiceInputController = VoiceInputController(this)
-        keySoundEngine = KeySoundEngine(this)
+        keySoundEngine = KeySoundEngine.getInstance(this)
         statsManager = TypingStatsManager.getInstance(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
@@ -158,14 +160,17 @@ class TypeGeniusIME : InputMethodService(),
                     val list = enabledCodes.map { LanguageId.fromCode(it) }
                     if (list.isNotEmpty()) {
                         enabledLanguages = list
-                        if (!enabledLanguages.contains(activeLanguage)) {
+                        if (hasInitializedLanguage && !enabledLanguages.contains(activeLanguage)) {
                             activeLanguage = enabledLanguages.first()
                         }
                     }
                 }
             }
+            soundEnabled = settingsManager.soundOnKeyPress.first()
+            soundProfile = settingsManager.soundProfile.first()
             val savedLangCode = settingsManager.activeLanguageCode.first()
             activeLanguage = LanguageId.fromCode(savedLangCode)
+            hasInitializedLanguage = true
             activeFancyStyle = settingsManager.activeFancyFontStyle.first()
         }
 
@@ -351,8 +356,13 @@ class TypeGeniusIME : InputMethodService(),
         updateAutoCapitalizeState()
 
         serviceScope.launch {
-            val savedCode = settingsManager.activeLanguageCode.first()
-            activeLanguage = LanguageId.fromCode(savedCode)
+            if (!hasInitializedLanguage) {
+                val savedCode = settingsManager.activeLanguageCode.first()
+                activeLanguage = LanguageId.fromCode(savedCode)
+                hasInitializedLanguage = true
+            }
+            soundEnabled = settingsManager.soundOnKeyPress.first()
+            soundProfile = settingsManager.soundProfile.first()
             updateSuggestions()
         }
     }
@@ -425,15 +435,20 @@ class TypeGeniusIME : InputMethodService(),
                 val rawChar = action.label
                 isTypingActive = true
 
-                if (activeLanguage == LanguageId.BANGLA_PHONETIC && rawChar.matches(Regex("[a-zA-Z]"))) {
+                if (activeLanguage == LanguageId.BANGLA_PHONETIC && rawChar.length == 1 && rawChar[0] in 'a'..'z' || (activeLanguage == LanguageId.BANGLA_PHONETIC && rawChar.length == 1 && rawChar[0] in 'A'..'Z')) {
                     composingBuffer += rawChar
                     val candidates = BengaliPhoneticParser.parsePhonetic(composingBuffer)
-                    val top = candidates.firstOrNull() ?: composingBuffer
+                    val top = candidates.firstOrNull { cand -> cand.any { it in '\u0980'..'\u09FF' } }
+                        ?: candidates.firstOrNull()
+                        ?: composingBuffer
                     val preview = if (activeFancyStyle != FancyFontStyle.NORMAL && !activeFancyStyle.isDecoratorFrame) {
                         UnicodeTextStyler.styleText(top, activeFancyStyle)
                     } else top
                     ic.setComposingText(preview, 1)
                     suggestions = candidates
+                    if (isShifted && !isCapsLock) {
+                        isShifted = false
+                    }
                 } else {
                     if (composingBuffer.isNotEmpty()) {
                         commitComposing()
@@ -468,7 +483,14 @@ class TypeGeniusIME : InputMethodService(),
             KeyType.SPACEBAR -> {
                 val contextBeforeSpace = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
                 if (composingBuffer.isNotEmpty()) {
-                    val topCandidate = suggestions.firstOrNull { !it.startsWith("✓ ") } ?: composingBuffer
+                    val topCandidate = if (activeLanguage == LanguageId.BANGLA_PHONETIC) {
+                        val parsed = BengaliPhoneticParser.parsePhonetic(composingBuffer)
+                        parsed.firstOrNull { cand -> cand.any { it in '\u0980'..'\u09FF' } }
+                            ?: suggestions.firstOrNull { !it.startsWith("✓ ") }
+                            ?: composingBuffer
+                    } else {
+                        suggestions.firstOrNull { !it.startsWith("✓ ") } ?: composingBuffer
+                    }
                     val toCommit = if (activeFancyStyle != FancyFontStyle.NORMAL) {
                         UnicodeTextStyler.styleText(topCandidate, activeFancyStyle)
                     } else topCandidate
@@ -1393,12 +1415,16 @@ class TypeGeniusIME : InputMethodService(),
     private fun updateSuggestions() {
         serviceScope.launch {
             if (composingBuffer.isNotEmpty()) {
+                val snapshotBuffer = composingBuffer
                 activeGrammarSuggestions = emptyMap()
                 liveGrammarIssueCount = 0
-                val shortcutMatches = shortcutRepository.findMatchingExpansions(composingBuffer)
-                suggestions = (shortcutMatches + BengaliPhoneticParser.parsePhonetic(composingBuffer))
-                    .distinct()
-                    .take(6)
+                val phonetic = BengaliPhoneticParser.parsePhonetic(snapshotBuffer)
+                val shortcutMatches = shortcutRepository.findMatchingExpansions(snapshotBuffer)
+                if (composingBuffer == snapshotBuffer) {
+                    suggestions = (phonetic + shortcutMatches)
+                        .distinct()
+                        .take(6)
+                }
             } else {
                 val ic = currentInputConnection
                 val textBefore = ic?.getTextBeforeCursor(80, 0)?.toString() ?: ""

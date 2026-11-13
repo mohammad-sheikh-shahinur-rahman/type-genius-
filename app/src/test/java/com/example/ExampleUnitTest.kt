@@ -654,4 +654,50 @@ class ExampleUnitTest {
         assertEquals("TypeGenius Keyboard", AppAboutMetadata.APP_NAME)
         assertEquals("com.itamadersomajinc.typegenius", AppAboutMetadata.PACKAGE_ID)
     }
+
+    @Test
+    fun testAvroPhonetic_allAsciiLettersProduceBengaliFirstAndHaveKeyHints() {
+        val letters = ('a'..'z') + ('A'..'Z')
+        letters.forEach { ch ->
+            val candidates = BengaliPhoneticParser.parsePhonetic(ch.toString())
+            val first = candidates.firstOrNull().orEmpty()
+            assertTrue(
+                "Expected Bengali Unicode script first for '$ch', but got '$first' ($candidates)",
+                first.any { it in '\u0980'..'\u09FF' }
+            )
+        }
+
+        val avroLower = KeyboardLayouts.getAlphabetRows(LanguageId.BANGLA_PHONETIC, isShifted = false)
+        val aKey = avroLower[1].firstOrNull { it.label == "a" }
+        val kKey = avroLower[1].firstOrNull { it.label == "k" }
+        assertEquals("আ", aKey?.secondaryLabel)
+        assertEquals("ক", kKey?.secondaryLabel)
+
+        val avroUpper = KeyboardLayouts.getAlphabetRows(LanguageId.BANGLA_PHONETIC, isShifted = true)
+        val tUpperKey = avroUpper[0].firstOrNull { it.label == "T" }
+        assertEquals("ট", tUpperKey?.secondaryLabel)
+    }
+
+    @Test
+    fun testKeySoundEngine_synthesizesAudibleWavForAllProfiles() {
+        val pcmMap = com.example.service.KeySoundEngine.buildAllProfilesPcmMap()
+        SoundProfile.entries.forEach { profile ->
+            val stdSamples = pcmMap[profile to "std"]
+            assertNotNull("Expected synthesized PCM for ${profile.name}", stdSamples)
+            assertTrue(
+                "Expected audible amplitude for ${profile.name}",
+                com.example.service.KeySoundEngine.hasAudibleEnergy(stdSamples!!)
+            )
+            val wav = com.example.service.KeySoundEngine.buildWavBytes(stdSamples)
+            assertEquals('R'.code.toByte(), wav[0])
+            assertEquals('I'.code.toByte(), wav[1])
+            assertEquals('F'.code.toByte(), wav[2])
+            assertEquals('F'.code.toByte(), wav[3])
+            assertEquals('W'.code.toByte(), wav[8])
+            assertEquals('A'.code.toByte(), wav[9])
+            assertEquals('V'.code.toByte(), wav[10])
+            assertEquals('E'.code.toByte(), wav[11])
+            assertEquals(44 + stdSamples.size * 2, wav.size)
+        }
+    }
 }
