@@ -13,9 +13,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,14 +26,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.ShortText
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -104,9 +106,10 @@ fun PhotoBackgroundThemeCard(settingsManager: SettingsManager) {
         }
     }
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -222,43 +225,74 @@ fun PersonalShortcutsCard() {
         repo.ensureSeededDefaults()
     }
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.ShortText, contentDescription = null, tint = TGMagenta)
+                Icon(Icons.AutoMirrored.Filled.ShortText, contentDescription = null, tint = TGMagenta)
                 Column {
                     Text("Personal Dictionary & Text Shortcuts", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Text("Type shortcut code (e.g. gm, slm) to get instant phrase suggestions", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = triggerInput,
-                    onValueChange = { triggerInput = it },
-                    label = { Text("Code", fontSize = 12.sp) },
-                    placeholder = { Text("addr") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .weight(0.36f)
-                        .testTag("shortcut_trigger_input")
-                )
-                OutlinedTextField(
-                    value = expansionInput,
-                    onValueChange = { expansionInput = it },
-                    label = { Text("Expanded Text / Phrase", fontSize = 12.sp) },
-                    placeholder = { Text("Sylhet, Bangladesh") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .weight(0.64f)
-                        .testTag("shortcut_expansion_input")
-                )
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val stackVertically = maxWidth < 330.dp
+                if (stackVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = triggerInput,
+                            onValueChange = { triggerInput = it },
+                            label = { Text("Code", fontSize = 12.sp) },
+                            placeholder = { Text("addr") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("shortcut_trigger_input")
+                        )
+                        OutlinedTextField(
+                            value = expansionInput,
+                            onValueChange = { expansionInput = it },
+                            label = { Text("Expanded Text / Phrase", fontSize = 12.sp) },
+                            placeholder = { Text("Sylhet, Bangladesh") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("shortcut_expansion_input")
+                        )
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = triggerInput,
+                            onValueChange = { triggerInput = it },
+                            label = { Text("Code", fontSize = 12.sp) },
+                            placeholder = { Text("addr") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(0.36f)
+                                .testTag("shortcut_trigger_input")
+                        )
+                        OutlinedTextField(
+                            value = expansionInput,
+                            onValueChange = { expansionInput = it },
+                            label = { Text("Expanded Text / Phrase", fontSize = 12.sp) },
+                            placeholder = { Text("Sylhet, Bangladesh") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(0.64f)
+                                .testTag("shortcut_expansion_input")
+                        )
+                    }
+                }
             }
 
             Button(

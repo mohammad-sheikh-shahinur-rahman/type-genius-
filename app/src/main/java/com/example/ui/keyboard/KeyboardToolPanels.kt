@@ -1,8 +1,11 @@
 package com.example.ui.keyboard
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,17 +24,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.FormatIndentIncrease
+import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureInPictureAlt
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.TextFormat
@@ -47,12 +56,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,9 +74,9 @@ import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
+import com.example.model.KeyboardToolId
 import com.example.model.KeyboardViewMode
 import com.example.model.OneHandedMode
-import kotlinx.coroutines.launch
 
 @Composable
 fun NumpadPanel(
@@ -337,18 +351,25 @@ fun TextEditorPanel(
     }
 }
 
-/**
- * Matches Screenshot 3 Tools Drawer Grid:
- * "Hold and drag to customize" + Rounded tile grid with icon + label underneath.
- */
 @Composable
 fun MoreToolsPanel(
     colors: KeyboardColors,
+    toolbarTools: List<KeyboardToolId>,
     oneHandedMode: OneHandedMode,
     heightPreset: KeyboardHeightPreset,
     floatingMode: Boolean,
     isIncognitoMode: Boolean = false,
+    liveGrammarIssueCount: Int = 0,
+    draggingTool: KeyboardToolId? = null,
+    isDropTargetActive: Boolean = false,
+    onPanelBoundsChanged: (Rect) -> Unit = {},
+    onStartToolDrag: (KeyboardToolId, Offset) -> Unit = { _, _ -> },
+    onDragToolMove: (Offset) -> Unit = {},
+    onEndToolDrag: () -> Unit = {},
+    onToggleToolInToolbar: (KeyboardToolId) -> Unit = {},
+    onResetToolbarTools: () -> Unit = {},
     onSelectViewMode: (KeyboardViewMode) -> Unit,
+    onOpenSettings: () -> Unit = {},
     onCycleOneHanded: () -> Unit,
     onCycleHeight: () -> Unit,
     onToggleFloating: () -> Unit,
@@ -358,34 +379,69 @@ fun MoreToolsPanel(
     modifier: Modifier = Modifier
 ) {
     data class ToolTile(
+        val id: KeyboardToolId,
         val label: String,
         val icon: ImageVector,
         val active: Boolean = false,
+        val badgeCount: Int = 0,
         val testTag: String,
         val onClick: () -> Unit
     )
 
     val tools = listOf(
         ToolTile(
-            label = if (oneHandedMode == OneHandedMode.FULL) "One-hand/Split" else oneHandedMode.label,
+            id = KeyboardToolId.TEXT_EDITING,
+            label = "Text editing",
+            icon = Icons.AutoMirrored.Filled.FormatIndentIncrease,
+            testTag = "tool_text_editing",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TEXT_EDITOR) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.GEMINI_AI,
+            label = "GemType AI",
+            icon = Icons.Default.AutoAwesome,
+            badgeCount = liveGrammarIssueCount,
+            testTag = "tool_gemini_ai",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.GEMINI_AI) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.ONE_HANDED,
+            label = if (oneHandedMode == OneHandedMode.FULL) "One-hand" else oneHandedMode.label,
             icon = Icons.Default.Smartphone,
             active = oneHandedMode != OneHandedMode.FULL,
             testTag = "tool_one_handed",
             onClick = { onHaptic(); onCycleOneHanded() }
         ),
         ToolTile(
-            label = "Text editing",
-            icon = Icons.Default.FormatIndentIncrease,
-            testTag = "tool_text_editing",
-            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TEXT_EDITOR) }
-        ),
-        ToolTile(
+            id = KeyboardToolId.FANCY_FONTS,
             label = "Fancy Fonts",
             icon = Icons.Default.TextFormat,
             testTag = "tool_fancy_fonts",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.FANCY_FONTS) }
         ),
         ToolTile(
+            id = KeyboardToolId.CLIPBOARD,
+            label = "Clipboard",
+            icon = Icons.Default.ContentPaste,
+            testTag = "tool_clipboard",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.CLIPBOARD) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.TRANSLATOR,
+            label = "Translate",
+            icon = Icons.Default.Translate,
+            testTag = "tool_translate",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TRANSLATOR) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.THEMES,
+            label = "Themes",
+            icon = Icons.Default.Palette,
+            testTag = "tool_themes",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.THEME_PICKER) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.INCOGNITO,
             label = "Incognito",
             icon = Icons.Default.VisibilityOff,
             active = isIncognitoMode,
@@ -393,12 +449,7 @@ fun MoreToolsPanel(
             onClick = { onHaptic(); onToggleIncognito() }
         ),
         ToolTile(
-            label = "Translate",
-            icon = Icons.Default.Translate,
-            testTag = "tool_translate",
-            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TRANSLATOR) }
-        ),
-        ToolTile(
+            id = KeyboardToolId.FLOATING,
             label = if (floatingMode) "Docked" else "Floating",
             icon = Icons.Default.PictureInPictureAlt,
             active = floatingMode,
@@ -406,25 +457,43 @@ fun MoreToolsPanel(
             onClick = { onHaptic(); onToggleFloating() }
         ),
         ToolTile(
-            label = "Resize (${heightPreset.label})",
+            id = KeyboardToolId.RESIZE,
+            label = "Size (${heightPreset.label})",
             icon = Icons.Default.AspectRatio,
             active = heightPreset != KeyboardHeightPreset.NORMAL,
             testTag = "tool_resize",
             onClick = { onHaptic(); onCycleHeight() }
         ),
         ToolTile(
+            id = KeyboardToolId.EMOJI,
             label = "Emoji",
             icon = Icons.Default.Mood,
             testTag = "tool_emoji",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.EMOJI) }
         ),
         ToolTile(
+            id = KeyboardToolId.GIF,
+            label = "GIF",
+            icon = Icons.Default.Gif,
+            testTag = "tool_gif",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.EMOJI) }
+        ),
+        ToolTile(
+            id = KeyboardToolId.NUMPAD,
             label = "Numpad",
             icon = Icons.Default.Dialpad,
             testTag = "tool_numpad",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.NUMPAD) }
         ),
         ToolTile(
+            id = KeyboardToolId.SETTINGS,
+            label = "Settings",
+            icon = Icons.Default.Settings,
+            testTag = "tool_settings",
+            onClick = { onHaptic(); onOpenSettings() }
+        ),
+        ToolTile(
+            id = KeyboardToolId.SHARE,
             label = "Share",
             icon = Icons.Default.Share,
             testTag = "tool_share",
@@ -432,27 +501,62 @@ fun MoreToolsPanel(
         )
     )
 
+    val panelBg by animateColorAsState(
+        targetValue = if (isDropTargetActive) colors.accent.copy(alpha = 0.08f) else colors.background,
+        animationSpec = tween(150),
+        label = "panelDropBg"
+    )
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .background(colors.background)
+            .onGloballyPositioned { coords -> onPanelBoundsChanged(coords.boundsInRoot()) }
+            .clip(RoundedCornerShape(12.dp))
+            .background(panelBg)
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         val cols = if (maxWidth >= 520.dp) 5 else 4
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(248.dp)
+                .height(252.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "Tap a tool to launch or toggle",
-                color = colors.textSecondary,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isDropTargetActive) "Drop here to remove from top bar" else "Hold & drag between bar and panel",
+                    color = if (isDropTargetActive) colors.accent else colors.textSecondary,
+                    fontSize = 11.5.sp,
+                    fontWeight = if (isDropTargetActive) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.keySpecialBackground)
+                        .clickable {
+                            onHaptic()
+                            onResetToolbarTools()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .testTag("tools_reset_toolbar_button")
+                ) {
+                    Text(
+                        text = "Reset",
+                        color = colors.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
 
             tools.chunked(cols).forEach { rowItems ->
                 Row(
@@ -460,9 +564,34 @@ fun MoreToolsPanel(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     rowItems.forEach { item ->
+                        val isInTopBar = item.id in toolbarTools
+                        val isBeingDragged = draggingTool == item.id
+                        var tileBounds by remember(item.id) { mutableStateOf(Rect.Zero) }
+
                         Column(
                             modifier = Modifier
                                 .weight(1f)
+                                .alpha(if (isBeingDragged) 0.35f else 1f)
+                                .onGloballyPositioned { tileBounds = it.boundsInRoot() }
+                                .pointerInput(item.id) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { localOffset ->
+                                            onHaptic()
+                                            onStartToolDrag(
+                                                item.id,
+                                                Offset(tileBounds.left + localOffset.x, tileBounds.top + localOffset.y)
+                                            )
+                                        },
+                                        onDrag = { change, _ ->
+                                            change.consume()
+                                            onDragToolMove(
+                                                Offset(tileBounds.left + change.position.x, tileBounds.top + change.position.y)
+                                            )
+                                        },
+                                        onDragEnd = { onEndToolDrag() },
+                                        onDragCancel = { onEndToolDrag() }
+                                    )
+                                }
                                 .testTag(item.testTag)
                                 .clickable(onClick = item.onClick),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -474,12 +603,8 @@ fun MoreToolsPanel(
                                     .height(48.dp)
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(
-                                        if (item.active) colors.accent.copy(alpha = 0.25f)
+                                        if (item.active) colors.accent.copy(alpha = 0.22f)
                                         else colors.keyBackground
-                                    )
-                                    .then(
-                                        if (item.active) Modifier.border(1.dp, colors.accent, RoundedCornerShape(14.dp))
-                                        else Modifier
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -489,6 +614,48 @@ fun MoreToolsPanel(
                                     tint = if (item.active) colors.accent else colors.textPrimary,
                                     modifier = Modifier.size(21.dp)
                                 )
+
+                                // Top-right badge toggles inclusion in Top Bar (backup to drag-and-drop)
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isInTopBar) colors.accent else colors.keySpecialBackground
+                                        )
+                                        .clickable {
+                                            onHaptic()
+                                            onToggleToolInToolbar(item.id)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isInTopBar) Icons.Default.Check else Icons.Default.Add,
+                                        contentDescription = if (isInTopBar) "On Top Bar" else "Add to Top Bar",
+                                        tint = if (isInTopBar) Color.White else colors.textSecondary,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                }
+
+                                if (item.badgeCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopStart)
+                                            .padding(4.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(colors.accent)
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = if (item.badgeCount > 9) "9+" else item.badgeCount.toString(),
+                                            color = Color.White,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                             Text(
                                 text = item.label,

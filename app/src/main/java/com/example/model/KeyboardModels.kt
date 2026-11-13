@@ -131,9 +131,47 @@ enum class KeyboardViewMode {
     CLIPBOARD,
     TEXT_EDITOR,
     TRANSLATOR,
+    GEMINI_AI,
     THEME_PICKER,
     FANCY_FONTS,
     MORE_TOOLS
+}
+
+enum class KeyboardToolId(
+    val id: String,
+    val label: String,
+    val testTag: String
+) {
+    TEXT_EDITING("text_editing", "Text edit", "toolbox_text_editing"),
+    GEMINI_AI("gemini_ai", "GemType AI", "toolbox_gemini"),
+    EMOJI("emoji", "Emoji", "toolbox_emoji"),
+    CLIPBOARD("clipboard", "Clipboard", "toolbox_clipboard"),
+    TRANSLATOR("translator", "Translate", "toolbox_translator"),
+    FANCY_FONTS("fancy_fonts", "Fonts", "toolbox_fonts"),
+    THEMES("themes", "Themes", "toolbox_themes"),
+    INCOGNITO("incognito", "Incognito", "toolbox_incognito"),
+    SETTINGS("settings", "Settings", "toolbox_settings"),
+    GIF("gif", "GIF", "toolbox_gif"),
+    ONE_HANDED("one_handed", "One-hand", "toolbox_one_handed"),
+    FLOATING("floating", "Floating", "toolbox_floating"),
+    RESIZE("resize", "Resize", "toolbox_resize"),
+    NUMPAD("numpad", "Numpad", "toolbox_numpad"),
+    SHARE("share", "Share", "toolbox_share");
+
+    companion object {
+        val DEFAULT_TOOLBAR: List<KeyboardToolId> = listOf(
+            TEXT_EDITING,
+            GEMINI_AI,
+            EMOJI,
+            CLIPBOARD,
+            TRANSLATOR,
+            FANCY_FONTS,
+            THEMES,
+            SETTINGS
+        )
+
+        fun fromId(id: String): KeyboardToolId? = entries.find { it.id == id }
+    }
 }
 
 data class KeyAction(

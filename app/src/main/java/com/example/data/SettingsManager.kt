@@ -10,8 +10,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.data.dictionary.FancyFontStyle
 import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
+import com.example.model.KeyboardToolId
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
 import com.example.model.SoundProfile
@@ -62,6 +64,11 @@ class SettingsManager(private val context: Context) {
         val KEY_SPLIT_FOLDABLE = booleanPreferencesKey("split_keyboard_foldable")
         val KEY_ALWAYS_ENTER = booleanPreferencesKey("always_enter_button")
         val KEY_HAS_SEEN_SWIPE_TUTORIAL = booleanPreferencesKey("has_seen_swipe_tutorial")
+        val KEY_ACTIVE_FANCY_FONT = stringPreferencesKey("active_fancy_font_style")
+        val KEY_TOOLBAR_TOOLS = stringPreferencesKey("toolbar_tools_order")
+        val KEY_KEYBOARD_FONT_ID = stringPreferencesKey("keyboard_font_id")
+        val KEY_CUSTOM_FONT_PATH = stringPreferencesKey("custom_font_path")
+        val KEY_CUSTOM_FONT_NAME = stringPreferencesKey("custom_font_name")
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -317,4 +324,52 @@ class SettingsManager(private val context: Context) {
 
     val hasSeenSwipeTutorial: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_HAS_SEEN_SWIPE_TUTORIAL] ?: false }
     suspend fun setHasSeenSwipeTutorial(seen: Boolean) { context.dataStore.edit { it[KEY_HAS_SEEN_SWIPE_TUTORIAL] = seen } }
+
+    val activeFancyFontStyle: Flow<FancyFontStyle> = context.dataStore.data.map { prefs ->
+        FancyFontStyle.fromId(prefs[KEY_ACTIVE_FANCY_FONT] ?: FancyFontStyle.NORMAL.id)
+    }
+    suspend fun setActiveFancyFontStyle(style: FancyFontStyle) {
+        context.dataStore.edit { it[KEY_ACTIVE_FANCY_FONT] = style.id }
+    }
+
+    val toolbarTools: Flow<List<KeyboardToolId>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[KEY_TOOLBAR_TOOLS]
+        if (raw.isNullOrBlank()) {
+            KeyboardToolId.DEFAULT_TOOLBAR
+        } else {
+            val parsed = raw.split(",").mapNotNull { KeyboardToolId.fromId(it.trim()) }.distinct()
+            parsed.ifEmpty { KeyboardToolId.DEFAULT_TOOLBAR }
+        }
+    }
+
+    suspend fun setToolbarTools(tools: List<KeyboardToolId>) {
+        val clean = tools.distinct().ifEmpty { listOf(KeyboardToolId.TEXT_EDITING) }
+        context.dataStore.edit { it[KEY_TOOLBAR_TOOLS] = clean.joinToString(",") { tool -> tool.id } }
+    }
+
+    val keyboardFontId: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_KEYBOARD_FONT_ID] ?: KeyboardFontPreset.ATMA_HANDWRITING.id
+    }
+
+    val customFontPath: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CUSTOM_FONT_PATH] ?: ""
+    }
+
+    val customFontName: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CUSTOM_FONT_NAME] ?: ""
+    }
+
+    suspend fun setKeyboardFontId(fontId: String) {
+        context.dataStore.edit { it[KEY_KEYBOARD_FONT_ID] = fontId }
+    }
+
+    suspend fun setCustomFont(path: String, displayName: String) {
+        context.dataStore.edit {
+            it[KEY_CUSTOM_FONT_PATH] = path
+            it[KEY_CUSTOM_FONT_NAME] = displayName
+            if (path.isNotBlank()) {
+                it[KEY_KEYBOARD_FONT_ID] = KeyboardFontPreset.CUSTOM_IMPORTED.id
+            }
+        }
+    }
 }

@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,12 +21,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -40,13 +46,12 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.SwapHoriz
 import com.example.ui.keyboard.SpacebarSwipeTutorialOverlay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -88,8 +93,10 @@ import com.example.ui.app.AppearanceAndLayoutScreen
 import com.example.ui.app.BackendlessVerificationScreen
 import com.example.ui.app.GeneralSettingsScreen
 import com.example.ui.app.GestureSettingsScreen
+import com.example.ui.app.HandwritingFontSettingsCard
 import com.example.ui.app.LanguagesScreen
 import com.example.ui.app.OfflineTranslatorCard
+import com.example.ui.app.StylishFontStudioCard
 import com.example.ui.keyboard.SpacebarComponent
 import com.example.ui.theme.TGMagenta
 import com.example.ui.theme.TGViolet
@@ -161,6 +168,7 @@ fun MainScreen(
     checkImeStatus: () -> Pair<Boolean, Boolean>
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showBackendlessDetails by remember { mutableStateOf(false) }
     val tabs = listOf(
         "Home" to Icons.Default.Keyboard,
         "Layout" to Icons.Default.Palette,
@@ -169,10 +177,15 @@ fun MainScreen(
         "Settings" to Icons.Default.Settings
     )
 
+    BackHandler(enabled = showBackendlessDetails) {
+        showBackendlessDetails = false
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isExpandedWidth = maxWidth >= 600.dp
 
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (!isExpandedWidth) {
                     NavigationBar(
@@ -238,21 +251,33 @@ fun MainScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentAlignment = Alignment.TopCenter
                 ) {
-                    Box(modifier = Modifier.fillMaxSize().widthIn(max = 820.dp)) {
-                        when (selectedTab) {
-                            0 -> HomeScreen(
-                                settingsManager = settingsManager,
-                                onOpenImeSettings = onOpenImeSettings,
-                                onOpenImePicker = onOpenImePicker,
-                                checkImeStatus = checkImeStatus,
-                                onNavigateToGestures = { selectedTab = 2 },
-                                onNavigateToLanguages = { selectedTab = 3 },
-                                onNavigateToBackendless = { selectedTab = 4 }
-                            )
-                            1 -> AppearanceAndLayoutScreen(settingsManager = settingsManager)
-                            2 -> GestureSettingsScreen(settingsManager = settingsManager)
-                            3 -> LanguagesScreen(settingsManager = settingsManager)
-                            4 -> GeneralSettingsScreen(settingsManager = settingsManager)
+                    Box(modifier = Modifier.fillMaxSize().widthIn(max = 1040.dp)) {
+                        if (showBackendlessDetails) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                TextButton(
+                                    onClick = { showBackendlessDetails = false },
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text("← Back", color = TGMagenta, fontWeight = FontWeight.Bold)
+                                }
+                                BackendlessVerificationScreen()
+                            }
+                        } else {
+                            when (selectedTab) {
+                                0 -> HomeScreen(
+                                    settingsManager = settingsManager,
+                                    onOpenImeSettings = onOpenImeSettings,
+                                    onOpenImePicker = onOpenImePicker,
+                                    checkImeStatus = checkImeStatus,
+                                    onNavigateToGestures = { selectedTab = 2 },
+                                    onNavigateToLanguages = { selectedTab = 3 },
+                                    onNavigateToBackendless = { showBackendlessDetails = true }
+                                )
+                                1 -> AppearanceAndLayoutScreen(settingsManager = settingsManager)
+                                2 -> GestureSettingsScreen(settingsManager = settingsManager)
+                                3 -> LanguagesScreen(settingsManager = settingsManager)
+                                4 -> GeneralSettingsScreen(settingsManager = settingsManager)
+                            }
                         }
                     }
                 }
@@ -261,6 +286,7 @@ fun MainScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     settingsManager: SettingsManager,
@@ -310,251 +336,308 @@ fun HomeScreen(
     }
     val activeLang = remember(activeLangCode) { LanguageId.fromCode(activeLangCode) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(TGMagenta.copy(alpha = 0.25f), TGViolet.copy(alpha = 0.25f))
-                        )
-                    )
-                    .padding(20.dp)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isTabletHome = maxWidth >= 680.dp
+
+        @Composable
+        fun ActivationCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_tg_logo),
-                        contentDescription = "TypeGenius Logo",
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Keyboard Activation Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+
+                    ActivationStepRow(
+                        ready = imeStatus.first,
+                        title = "1. Enable in Settings",
+                        subtitle = if (imeStatus.first) "TypeGenius is enabled" else "Tap to enable in Android IME list",
+                        buttonText = if (imeStatus.first) "Enabled" else "Enable",
+                        buttonColor = if (imeStatus.first) Color(0xFF2E7D32) else TGMagenta,
+                        testTag = "enable_ime_button",
+                        onClick = {
+                            onOpenImeSettings()
+                            scope.launch {
+                                delay(1000)
+                                imeStatus = checkImeStatus()
+                            }
+                        }
                     )
-                    Column {
-                        Text("TypeGenius Keyboard", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("32 Languages (incl. Sylheti) • Material You", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                        Text("Probhat, Avro Phonetic, Offline Translator & Swipe", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+
+                    ActivationStepRow(
+                        ready = imeStatus.second,
+                        title = "2. Set as Default IME",
+                        subtitle = if (imeStatus.second) "TypeGenius is current keyboard" else "Select TypeGenius as active input",
+                        buttonText = if (imeStatus.second) "Active" else "Select",
+                        buttonColor = if (imeStatus.second) Color(0xFF2E7D32) else TGViolet,
+                        testTag = "select_ime_button",
+                        onClick = {
+                            onOpenImePicker()
+                            scope.launch {
+                                delay(1000)
+                                imeStatus = checkImeStatus()
+                            }
+                        }
+                    )
+
+                    ActivationStepRow(
+                        ready = micGranted,
+                        title = "3. Continuous Voice Typing Mic",
+                        subtitle = if (micGranted) "Microphone ready for continuous dictation" else "Grant permission for continuous voice typing",
+                        buttonText = if (micGranted) "Ready" else "Allow",
+                        buttonColor = if (micGranted) Color(0xFF2E7D32) else TGMagenta,
+                        testTag = "grant_mic_button",
+                        onClick = {
+                            if (!micGranted) {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                    )
                 }
             }
         }
 
-        // Activation Status Card
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Keyboard Activation Status", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-
-                ActivationStepRow(
-                    ready = imeStatus.first,
-                    title = "1. Enable in Settings",
-                    subtitle = if (imeStatus.first) "TypeGenius is enabled" else "Tap to enable in Android IME list",
-                    buttonText = if (imeStatus.first) "Enabled" else "Enable",
-                    buttonColor = if (imeStatus.first) Color(0xFF2E7D32) else TGMagenta,
-                    testTag = "enable_ime_button",
-                    onClick = {
-                        onOpenImeSettings()
-                        scope.launch {
-                            delay(1000)
-                            imeStatus = checkImeStatus()
+        @Composable
+        fun TypingPlaygroundCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Interactive Typing Test", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        if (testText.isNotEmpty()) {
+                            TextButton(onClick = { testText = "" }) {
+                                Text("Clear", color = TGMagenta, fontSize = 12.sp)
+                            }
                         }
                     }
-                )
 
-                ActivationStepRow(
-                    ready = imeStatus.second,
-                    title = "2. Set as Default IME",
-                    subtitle = if (imeStatus.second) "TypeGenius is current keyboard" else "Select TypeGenius as active input",
-                    buttonText = if (imeStatus.second) "Active" else "Select",
-                    buttonColor = if (imeStatus.second) Color(0xFF2E7D32) else TGViolet,
-                    testTag = "select_ime_button",
-                    onClick = {
-                        onOpenImePicker()
-                        scope.launch {
-                            delay(1000)
-                            imeStatus = checkImeStatus()
-                        }
-                    }
-                )
-
-                ActivationStepRow(
-                    ready = micGranted,
-                    title = "3. Voice Typing Mic",
-                    subtitle = if (micGranted) "Microphone permission granted" else "Grant permission for Speak Now voice typing",
-                    buttonText = if (micGranted) "Ready" else "Allow",
-                    buttonColor = if (micGranted) Color(0xFF2E7D32) else TGMagenta,
-                    testTag = "grant_mic_button",
-                    onClick = {
-                        if (!micGranted) {
-                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    }
-                )
-            }
-        }
-
-        // Interactive Typing Playground
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Interactive Typing Test", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    if (testText.isNotEmpty()) {
-                        TextButton(onClick = { testText = "" }) {
-                            Text("Clear", color = TGMagenta, fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                Text(
-                    text = "Tap below to test Probhat long-press, top toolbox, numpad, text editor, and ${LanguageId.entries.size}-language spacebar swipe.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = testText,
-                    onValueChange = { testText = it },
-                    placeholder = { Text("Type here to test keyboard...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("typing_test_field"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TGMagenta,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    ),
-                    maxLines = 4
-                )
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(
-                        text = "Chars: ${testText.length} | Words: ${if (testText.isBlank()) 0 else testText.trim().split("\\s+".toRegex()).size}",
-                        fontSize = 11.sp,
+                        text = "Long-press 'C' to Copy, 'V' to Paste, swipe spacebar to switch language, or tap Mic for continuous voice typing.",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "Active: ${activeLang.displayName}",
-                        fontSize = 11.sp,
-                        color = TGMagenta,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onNavigateToLanguages() }
+
+                    OutlinedTextField(
+                        value = testText,
+                        onValueChange = { testText = it },
+                        placeholder = { Text("এখানে টাইপ করে পরীক্ষা করুন...", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("typing_test_field"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TGMagenta,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        maxLines = 4
                     )
-                }
-            }
-        }
 
-        // On-Device Offline Translator Sandbox
-        OfflineTranslatorCard(settingsManager = settingsManager)
-
-        // Spacebar Swipe Sandbox Simulator
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Spacebar Swipe Simulator", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = null, tint = TGMagenta)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF26143F))
-                        .padding(4.dp)
-                ) {
-                    SpacebarComponent(
-                        activeLanguage = activeLang,
-                        enabledLanguages = enabledLangs,
-                        isSwipeEnabled = isSwipeEnabled,
-                        swipeSensitivity = swipeSensitivity,
-                        isHapticEnabled = isHapticEnabled,
-                        showLanguageLabel = showLangLabel,
-                        isLongPressEnabled = longPressLangPicker,
-                        backgroundColor = Color(0xFF381F5E),
-                        textColor = Color.White,
-                        accentColor = TGMagenta,
-                        onTapSpace = { testText += " " },
-                        onSwipeNextLanguage = {
-                            val cur = enabledLangs.indexOf(activeLang).coerceAtLeast(0)
-                            val next = (cur + 1) % enabledLangs.size
-                            scope.launch { settingsManager.setActiveLanguageCode(enabledLangs[next].code) }
-                        },
-                        onSwipePrevLanguage = {
-                            val cur = enabledLangs.indexOf(activeLang).coerceAtLeast(0)
-                            val prev = (cur - 1 + enabledLangs.size) % enabledLangs.size
-                            scope.launch { settingsManager.setActiveLanguageCode(enabledLangs[prev].code) }
-                        },
-                        onLongPressLanguagePicker = { onNavigateToLanguages() },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onNavigateToGestures) {
-                        Text("Configure Swipe Settings →", color = TGMagenta, fontSize = 13.sp)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            text = "Chars: ${testText.length} | Words: ${if (testText.isBlank()) 0 else testText.trim().split("\\s+".toRegex()).size}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Active: ${activeLang.displayName}",
+                            fontSize = 11.sp,
+                            color = TGMagenta,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { onNavigateToLanguages() }
+                        )
                     }
                 }
             }
         }
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        @Composable
+        fun SpacebarSandboxCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Spacebar Swipe Simulator", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = null, tint = TGMagenta)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF26143F))
+                            .padding(4.dp)
+                    ) {
+                        SpacebarComponent(
+                            activeLanguage = activeLang,
+                            enabledLanguages = enabledLangs,
+                            isSwipeEnabled = isSwipeEnabled,
+                            swipeSensitivity = swipeSensitivity,
+                            isHapticEnabled = isHapticEnabled,
+                            showLanguageLabel = showLangLabel,
+                            isLongPressEnabled = longPressLangPicker,
+                            backgroundColor = Color(0xFF381F5E),
+                            textColor = Color.White,
+                            accentColor = TGMagenta,
+                            onTapSpace = { testText += " " },
+                            onSwipeNextLanguage = {
+                                val cur = enabledLangs.indexOf(activeLang).coerceAtLeast(0)
+                                val next = (cur + 1) % enabledLangs.size
+                                scope.launch { settingsManager.setActiveLanguageCode(enabledLangs[next].code) }
+                            },
+                            onSwipePrevLanguage = {
+                                val cur = enabledLangs.indexOf(activeLang).coerceAtLeast(0)
+                                val prev = (cur - 1 + enabledLangs.size) % enabledLangs.size
+                                scope.launch { settingsManager.setActiveLanguageCode(enabledLangs[prev].code) }
+                            },
+                            onLongPressLanguagePicker = { onNavigateToLanguages() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onNavigateToGestures) {
+                            Text("Configure Swipe Settings →", color = TGMagenta, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onNavigateToBackendless)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ElevatedCard(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF4CAF50).copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(TGMagenta.copy(alpha = 0.24f), TGViolet.copy(alpha = 0.22f))
+                            )
+                        )
+                        .padding(18.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Security, contentDescription = "Security", tint = Color(0xFF4CAF50))
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_tg_logo),
+                                contentDescription = "TypeGenius Logo",
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("TypeGenius Keyboard", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("32 Languages (incl. Sylheti) • GemType AI", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                Text("হাতের লেখা ফন্ট • কন্টিনিউয়াস ভয়েস • লং-প্রেস কপি/পেস্ট", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("হাতের লেখা ফন্ট", "Auto ∞ Voice", "C = Copy / V = Paste", "Offline Translator").forEach { tag ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(tag, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = TGMagenta)
+                                }
+                            }
+                        }
+                    }
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("100% Backendless & Private", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("${LanguageId.entries.size} languages, on-device translator, Room SQLite & DataStore — zero servers.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            if (isTabletHome) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ActivationCard()
+                        HandwritingFontSettingsCard(settingsManager = settingsManager)
+                        SpacebarSandboxCard()
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        TypingPlaygroundCard()
+                        OfflineTranslatorCard(settingsManager = settingsManager)
+                        StylishFontStudioCard(settingsManager = settingsManager)
+                    }
                 }
-                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
+            } else {
+                ActivationCard()
+                TypingPlaygroundCard()
+                HandwritingFontSettingsCard(settingsManager = settingsManager)
+                OfflineTranslatorCard(settingsManager = settingsManager)
+                StylishFontStudioCard(settingsManager = settingsManager)
+                SpacebarSandboxCard()
+            }
+
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToBackendless)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF4CAF50).copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Default.Security, contentDescription = "Security", tint = Color(0xFF4CAF50))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("100% Backendless & Private", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("${LanguageId.entries.size} languages, on-device translator, Room SQLite & DataStore — zero servers.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
+                }
             }
         }
     }
@@ -571,7 +654,9 @@ private fun ActivationStepRow(
     onClick: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 50.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -593,7 +678,10 @@ private fun ActivationStepRow(
         Button(
             onClick = onClick,
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
-            modifier = Modifier.testTag(testTag)
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .defaultMinSize(minHeight = 44.dp)
+                .testTag(testTag)
         ) {
             Text(buttonText, fontSize = 12.sp)
         }

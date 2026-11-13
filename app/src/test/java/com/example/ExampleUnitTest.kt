@@ -1,17 +1,23 @@
 package com.example
 
+import com.example.data.KeyboardFontPreset
+import com.example.data.ai.GemTypeAction
+import com.example.data.ai.GemTypeAiEngine
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.OfflineGlideEngine
+import com.example.data.dictionary.OfflineGrammarEngine
 import com.example.data.dictionary.OfflineMathEvaluator
 import com.example.data.dictionary.OfflineSpellChecker
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.phonetic.BengaliPhoneticParser
 import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardTheme
+import com.example.model.KeyboardToolId
 import com.example.model.LanguageId
 import com.example.model.SwipeSensitivity
 import com.example.ui.keyboard.KeyboardLayouts
 import com.example.ui.keyboard.KeyboardThemeData
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -298,11 +304,34 @@ class ExampleUnitTest {
         val bold = UnicodeTextStyler.styleText("Hi 1", FancyFontStyle.BOLD_SANS)
         assertEquals("𝗛𝗶 𝟭", bold)
 
+        val cursive = UnicodeTextStyler.styleText("Abc", FancyFontStyle.SCRIPT_BOLD)
+        assertEquals("𝓐𝓫𝓬", cursive)
+
+        val gothic = UnicodeTextStyler.styleText("Type", FancyFontStyle.FRAKTUR_BOLD)
+        assertEquals("𝕿𝖞𝖕𝖊", gothic)
+
+        val squared = UnicodeTextStyler.styleText("hi", FancyFontStyle.SQUARED)
+        assertEquals("🄷🄸", squared)
+
         val circled = UnicodeTextStyler.styleText("abc", FancyFontStyle.CIRCLED)
         assertEquals("ⓐⓑⓒ", circled)
 
         val banglaDecor = UnicodeTextStyler.styleText("বাংলা", FancyFontStyle.DECORATED_STAR)
         assertEquals("✦ বাংলা ✦", banglaDecor)
+
+        val royalDecor = UnicodeTextStyler.styleText("সিলেট", FancyFontStyle.DECORATED_ROYAL)
+        assertEquals("꧁ সিলেট ꧂", royalDecor)
+
+        // Ensure combining underline does not insert mark before Bengali vowel sign া
+        val banglaUnderline = UnicodeTextStyler.styleText("বা", FancyFontStyle.UNDERLINE)
+        assertEquals("বা\u0332", banglaUnderline)
+
+        // Ensure unstyleToPlain cleanly converts styled text back before restyling
+        assertEquals("Abc", UnicodeTextStyler.unstyleToPlain(cursive))
+        assertEquals("Type", UnicodeTextStyler.unstyleToPlain(gothic))
+        assertEquals("বা", UnicodeTextStyler.unstyleToPlain(banglaUnderline))
+        assertEquals("বাংলা", UnicodeTextStyler.unstyleToPlain(banglaDecor))
+        assertEquals("Abc", UnicodeTextStyler.styleText(cursive, FancyFontStyle.NORMAL))
     }
 
     @Test
@@ -345,5 +374,153 @@ class ExampleUnitTest {
             languageId = LanguageId.BANGLA_PHONETIC
         )
         assertTrue("Expected 'আমি' in Banglish glide results: $bnResult", bnResult.contains("আমি"))
+    }
+
+    @Test
+    fun testOfflineGrammarEngine_englishAndBengaliCorrections() {
+        // English subject-verb agreement
+        val sv1 = OfflineGrammarEngine.analyzeContext("i is happy", LanguageId.ENGLISH)
+        // Trailing "i is" check
+        val sv2 = OfflineGrammarEngine.analyzeContext("i is", LanguageId.ENGLISH)
+        assertTrue(sv2.any { it.correctedPhrase == "I am" })
+        assertEquals("she doesn't", OfflineGrammarEngine.analyzeContext("she don't", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+        assertEquals("they were", OfflineGrammarEngine.analyzeContext("they was", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+
+        // Article agreement (a vs an)
+        assertEquals("an apple", OfflineGrammarEngine.analyzeContext("a apple", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+        assertEquals("a university", OfflineGrammarEngine.analyzeContext("an university", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+        assertEquals("an hour", OfflineGrammarEngine.analyzeContext("a hour", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+
+        // Auxiliary + past verb tense
+        assertEquals("didn't go", OfflineGrammarEngine.analyzeContext("I didn't went", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+        assertEquals("better", OfflineGrammarEngine.analyzeContext("more better", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+        assertEquals("better than", OfflineGrammarEngine.analyzeContext("better then", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+
+        // Duplicate English word removal
+        assertEquals("the", OfflineGrammarEngine.analyzeContext("the the", LanguageId.ENGLISH).firstOrNull()?.correctedPhrase)
+
+        // Fast safe Spacebar auto-corrections
+        assertEquals("I", OfflineGrammarEngine.autoCorrectWordOnSpace("i", LanguageId.ENGLISH))
+        assertEquals("the", OfflineGrammarEngine.autoCorrectWordOnSpace("teh", LanguageId.ENGLISH))
+        assertEquals("I'm", OfflineGrammarEngine.autoCorrectWordOnSpace("im", LanguageId.ENGLISH))
+        assertEquals("don't", OfflineGrammarEngine.autoCorrectWordOnSpace("dont", LanguageId.ENGLISH))
+
+        // Bengali grammar & Bangla Academy spelling fixes
+        assertEquals("ভালো", OfflineGrammarEngine.analyzeContext("ভাল", LanguageId.BANGLA_PROBHAT).firstOrNull()?.correctedPhrase)
+        assertEquals("করছি", OfflineGrammarEngine.analyzeContext("আমি করতেছি", LanguageId.BANGLA_PROBHAT).firstOrNull()?.correctedPhrase)
+        assertEquals("আমি আছি", OfflineGrammarEngine.analyzeContext("আমি আছো", LanguageId.BANGLA_PROBHAT).firstOrNull()?.correctedPhrase)
+        assertEquals("আপনি আছেন", OfflineGrammarEngine.analyzeContext("আপনি আছো", LanguageId.BANGLA_PROBHAT).firstOrNull()?.correctedPhrase)
+        assertEquals("একসাথে", OfflineGrammarEngine.analyzeContext("এক সাথে", LanguageId.BANGLA_PROBHAT).firstOrNull()?.correctedPhrase)
+
+        // Reduplication in Bengali ("ভালো ভালো") is natural and should NOT be collapsed as duplicate error
+        assertTrue(OfflineGrammarEngine.analyzeContext("ভালো ভালো", LanguageId.BANGLA_PROBHAT).none { it.correctedPhrase == "ভালো" })
+
+        // Enhanced spell checker direct + proximity lookup
+        assertEquals("receive", OfflineSpellChecker.directCorrectionFor("recieve"))
+        assertEquals("definitely", OfflineSpellChecker.directCorrectionFor("definately"))
+        assertTrue(sv1.isEmpty())
+    }
+
+    @Test
+    fun testKeyboardToolId_defaultToolbarContainsTextEditingAndGemTypeAi() {
+        val defaults = KeyboardToolId.DEFAULT_TOOLBAR
+        assertTrue(defaults.contains(KeyboardToolId.TEXT_EDITING))
+        assertTrue(defaults.contains(KeyboardToolId.GEMINI_AI))
+        assertEquals(KeyboardToolId.TEXT_EDITING, KeyboardToolId.fromId("text_editing"))
+        assertEquals(KeyboardToolId.GEMINI_AI, KeyboardToolId.fromId("gemini_ai"))
+        assertNull(KeyboardToolId.fromId("unknown_tool_id"))
+    }
+
+    @Test
+    fun testGemTypeAiEngine_offlineProofreadRewriteAndNativeConversion() = runBlocking {
+        // Multi-fix CHECK with selective applyCorrections
+        val checkRes = GemTypeAiEngine.runAction(
+            text = "she don't recieve a apple",
+            action = GemTypeAction.CHECK,
+            activeLanguage = LanguageId.ENGLISH,
+            apiKey = ""
+        )
+        assertTrue("Expected multiple local fixes: ${checkRes.corrections}", checkRes.corrections.size >= 3)
+        assertTrue(checkRes.rewrittenText.contains("she doesn't"))
+        assertTrue(checkRes.rewrittenText.contains("receive"))
+        assertTrue(checkRes.rewrittenText.contains("an apple"))
+
+        // Selective keep/skip: keep only the first and third fixes
+        val selective = GemTypeAiEngine.applyCorrections(
+            text = "she don't recieve a apple",
+            corrections = listOf(checkRes.corrections.first(), checkRes.corrections.last())
+        )
+        assertTrue(selective.contains("she doesn't"))
+        assertTrue(selective.contains("recieve"))
+        assertTrue(selective.contains("an apple"))
+
+        // Shorten removes filler words
+        val shortenRes = GemTypeAiEngine.runAction(
+            text = "I am basically really very happy",
+            action = GemTypeAction.SHORTEN,
+            activeLanguage = LanguageId.ENGLISH,
+            apiKey = ""
+        )
+        assertEquals("I am happy", shortenRes.rewrittenText)
+
+        // Formal & Casual register transforms
+        val formalRes = GemTypeAiEngine.runAction(
+            text = "hey i'm late pls wait",
+            action = GemTypeAction.FORMAL,
+            activeLanguage = LanguageId.ENGLISH,
+            apiKey = ""
+        )
+        assertTrue(formalRes.rewrittenText.contains("Hello"))
+        assertTrue(formalRes.rewrittenText.contains("I am"))
+        assertTrue(formalRes.rewrittenText.contains("please"))
+
+        val casualRes = GemTypeAiEngine.runAction(
+            text = "I am sorry, do not worry, thank you",
+            action = GemTypeAction.CASUAL,
+            activeLanguage = LanguageId.ENGLISH,
+            apiKey = ""
+        )
+        assertTrue(casualRes.rewrittenText.contains("I'm"))
+        assertTrue(casualRes.rewrittenText.contains("don't"))
+        assertTrue(casualRes.rewrittenText.contains("thanks"))
+
+        // Romanized Banglish -> Native Bengali script & English with Read As back-translation
+        val nativeRes = GemTypeAiEngine.runAction(
+            text = "ami bangla valobashi",
+            action = GemTypeAction.NATIVE,
+            activeLanguage = LanguageId.BANGLA_PHONETIC,
+            apiKey = ""
+        )
+        assertTrue("Expected Bengali script: ${nativeRes.rewrittenText}", nativeRes.rewrittenText.contains("আমি"))
+
+        val englishRes = GemTypeAiEngine.runAction(
+            text = "ami tomake valobashi",
+            action = GemTypeAction.ENGLISH,
+            activeLanguage = LanguageId.BANGLA_PHONETIC,
+            apiKey = ""
+        )
+        assertEquals("i love you", englishRes.rewrittenText.lowercase())
+        assertTrue(englishRes.nativeReadAs?.contains("আমি") == true)
+    }
+
+    @Test
+    fun testKeyboardFontPreset_andLongPressCopyPasteLayout() {
+        assertEquals(KeyboardFontPreset.ATMA_HANDWRITING, KeyboardFontPreset.fromId("unknown"))
+        assertEquals(KeyboardFontPreset.ATMA_HANDWRITING, KeyboardFontPreset.fromId("atma"))
+        assertEquals(KeyboardFontPreset.GALADA_CALLIGRAPHY, KeyboardFontPreset.fromId("galada"))
+        assertEquals(KeyboardFontPreset.CUSTOM_IMPORTED, KeyboardFontPreset.fromId("custom"))
+        assertEquals(KeyboardFontPreset.SYSTEM, KeyboardFontPreset.fromId("system"))
+
+        val unshiftedRow3 = KeyboardLayouts.getAlphabetRows(LanguageId.ENGLISH, isShifted = false)[2]
+        val cKey = unshiftedRow3.firstOrNull { it.label == "c" }
+        val vKey = unshiftedRow3.firstOrNull { it.label == "v" }
+        assertEquals("Copy", cKey?.secondaryLabel)
+        assertEquals("Paste", vKey?.secondaryLabel)
+        assertTrue(cKey?.extraVariants?.contains("Copy") == true)
+        assertTrue(vKey?.extraVariants?.contains("Paste") == true)
+
+        val shiftedRow3 = KeyboardLayouts.getAlphabetRows(LanguageId.ENGLISH, isShifted = true)[2]
+        assertEquals("Copy", shiftedRow3.firstOrNull { it.label == "C" }?.secondaryLabel)
+        assertEquals("Paste", shiftedRow3.firstOrNull { it.label == "V" }?.secondaryLabel)
     }
 }

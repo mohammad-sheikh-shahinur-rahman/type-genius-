@@ -108,19 +108,46 @@ object LocalTranslationGrammar {
         "i'm" to "i am",
         "im" to "i am",
         "you're" to "you are",
+        "youre" to "you are",
         "we're" to "we are",
         "they're" to "they are",
+        "theyre" to "they are",
+        "he's" to "he is",
+        "she's" to "she is",
         "it's" to "it is",
         "what's" to "what is",
+        "whats" to "what is",
         "how's" to "how is",
         "where's" to "where is",
+        "that's" to "that is",
+        "thats" to "that is",
         "don't" to "do not",
+        "dont" to "do not",
         "doesn't" to "does not",
+        "doesnt" to "does not",
         "didn't" to "did not",
+        "didnt" to "did not",
         "can't" to "cannot",
+        "cant" to "cannot",
         "won't" to "will not",
+        "wont" to "will not",
+        "isn't" to "is not",
+        "isnt" to "is not",
+        "aren't" to "are not",
+        "arent" to "are not",
+        "wasn't" to "was not",
+        "weren't" to "were not",
+        "haven't" to "have not",
+        "hasn't" to "has not",
+        "shouldn't" to "should not",
+        "wouldn't" to "would not",
+        "couldn't" to "could not",
         "i'll" to "i will",
-        "i've" to "i have"
+        "i've" to "i have",
+        "ive" to "i have",
+        "you've" to "you have",
+        "we've" to "we have",
+        "they've" to "they have"
     )
 
     private val sylhetiRomanToScript = mapOf(
@@ -187,22 +214,35 @@ object LocalTranslationGrammar {
         when (langCode) {
             "en" -> {
                 if (low.endsWith("ies") && low.length > 4) candidates.add(low.dropLast(3) + "y")
+                if (low.endsWith("ied") && low.length > 4) candidates.add(low.dropLast(3) + "y")
                 if (low.endsWith("es") && low.length > 3) candidates.add(low.dropLast(2))
                 if (low.endsWith("s") && low.length > 2) candidates.add(low.dropLast(1))
                 if (low.endsWith("ing") && low.length > 5) {
                     val stem = low.dropLast(3)
                     candidates.add(stem)
                     candidates.add(stem + "e")
+                    if (stem.length >= 3 && stem.last() == stem[stem.length - 2]) {
+                        candidates.add(stem.dropLast(1))
+                    }
                 }
                 if (low.endsWith("ed") && low.length > 4) {
                     val stem = low.dropLast(2)
                     candidates.add(stem)
                     candidates.add(stem + "e")
+                    if (stem.length >= 3 && stem.last() == stem[stem.length - 2]) {
+                        candidates.add(stem.dropLast(1))
+                    }
                 }
+                if (low.endsWith("er") && low.length > 4) candidates.add(low.dropLast(2))
+                if (low.endsWith("est") && low.length > 5) candidates.add(low.dropLast(3))
                 if (low.endsWith("ly") && low.length > 4) candidates.add(low.dropLast(2))
             }
             "bn", "syl", "as" -> {
-                val suffixes = listOf("গুলো", "গুলা", "দের", "টা", "টি", "খান", "কে", "রে", "তে", "য়", "ে", "র", "এর")
+                val suffixes = listOf(
+                    "গুলো", "গুলা", "দের", "টার", "টির", "টা", "টি", "খান", "খানা",
+                    "তেছি", "তেছে", "তেছো", "ছি", "ছো", "ছেন", "ছে", "লাম", "বে", "বেন",
+                    "কে", "রে", "তে", "য়", "ে", "র", "এর"
+                )
                 for (suffix in suffixes) {
                     if (low.endsWith(suffix) && low.length > suffix.length + 1) {
                         candidates.add(low.removeSuffix(suffix))

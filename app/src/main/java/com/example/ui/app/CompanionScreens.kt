@@ -9,9 +9,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,8 +32,11 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
@@ -37,6 +44,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -135,12 +143,13 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
         "afne bala achoinni" to "syl"
     )
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -386,50 +395,58 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
     val isGlideEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
     val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Spacebar & Typing Gestures", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text("Configure offline Glide swipe-to-type, Backspace swipe delete, and Spacebar language switching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = TGMagenta.copy(alpha = 0.15f)),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isTwoCol = maxWidth >= 660.dp
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showTutorial = true }
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            SettingsSectionHero(
+                title = "Spacebar & Typing Gestures",
+                subtitle = "Configure offline Glide swipe-to-type, Backspace swipe delete, and Spacebar language switching.",
+                badgeText = "GESTURES",
+                icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = Color.White) }
+            )
+
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = TGMagenta.copy(alpha = 0.14f)),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showTutorial = true }
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(TGMagenta),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text("💡", fontSize = 20.sp)
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Interactive Spacebar Swipe Tutorial", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Launch live gesture tutorial to master language switching.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(TGMagenta),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("💡", fontSize = 20.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Interactive Spacebar Swipe Tutorial", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Launch live gesture tutorial to master language switching.", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-        }
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SettingToggleRow(
                     title = "Offline Glide Typing (Swipe-to-Type)",
                     subtitle = "Slide finger across keys to input English & Banglish Phonetic words",
@@ -556,18 +573,13 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = "${LanguageId.entries.size} Offline Language Packs",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "All ${LanguageId.entries.size} keyboards and offline dictionaries work 100% locally. Enable languages to cycle with Spacebar Swipe.",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        SettingsSectionHero(
+            title = "${LanguageId.entries.size} Offline Language Packs",
+            subtitle = "All ${LanguageId.entries.size} keyboards and offline dictionaries work 100% locally. Enable languages to cycle with Spacebar Swipe.",
+            badgeText = "${enabledLangCodes.size} ACTIVE",
+            icon = { Icon(Icons.Default.Language, contentDescription = null, tint = Color.White) }
         )
 
         OutlinedTextField(
@@ -576,7 +588,7 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
             placeholder = { Text("Search ${LanguageId.entries.size} languages (e.g. Sylheti, Bengali, Hindi, Arabic)") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("language_search_field")
@@ -611,7 +623,7 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
                         settingsManager.setEnabledLanguages(LanguageId.entries.map { it.code }.toSet())
                     }
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
             ) {
                 Text("Enable All ${LanguageId.entries.size}", fontSize = 12.sp)
             }
@@ -631,78 +643,94 @@ fun LanguagesScreen(settingsManager: SettingsManager) {
                         }
                     }
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
             ) {
                 Text("Reset Top 5", fontSize = 12.sp)
             }
         }
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                filteredLanguages.forEach { lang ->
-                    val isEnabled = enabledLangCodes.contains(lang.code)
-                    val isActive = activeLangCode == lang.code
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val twoColLangs = maxWidth >= 600.dp
+                val langRows = if (twoColLangs) filteredLanguages.chunked(2) else filteredLanguages.map { listOf(it) }
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    langRows.forEach { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            pair.forEach { lang ->
+                                val isEnabled = enabledLangCodes.contains(lang.code)
+                                val isActive = activeLangCode == lang.code
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isActive) TGMagenta.copy(alpha = 0.14f) else Color.Transparent)
-                            .clickable {
-                                scope.launch {
-                                    if (!isEnabled) {
-                                        settingsManager.setEnabledLanguages(enabledLangCodes + lang.code)
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isActive) TGMagenta.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .clickable {
+                                            scope.launch {
+                                                if (!isEnabled) {
+                                                    settingsManager.setEnabledLanguages(enabledLangCodes + lang.code)
+                                                }
+                                                settingsManager.setActiveLanguageCode(lang.code)
+                                            }
+                                        }
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(
+                                                text = lang.nativeName,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            if (isActive) {
+                                                BadgeLabel("ACTIVE", TGMagenta)
+                                            }
+                                            if (lang.isRtl) {
+                                                BadgeLabel("RTL", TGViolet)
+                                            }
+                                        }
+                                        Text(
+                                            text = "${lang.displayName} • ${lang.region} • Key: ${lang.spacebarLabel}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                    settingsManager.setActiveLanguageCode(lang.code)
+
+                                    Switch(
+                                        checked = isEnabled,
+                                        onCheckedChange = { checked ->
+                                            val newSet = enabledLangCodes.toMutableSet()
+                                            if (checked) {
+                                                newSet.add(lang.code)
+                                            } else if (newSet.size > 1) {
+                                                newSet.remove(lang.code)
+                                            }
+                                            scope.launch {
+                                                settingsManager.setEnabledLanguages(newSet)
+                                                if (!newSet.contains(activeLangCode)) {
+                                                    newSet.firstOrNull()?.let { settingsManager.setActiveLanguageCode(it) }
+                                                }
+                                            }
+                                        },
+                                        colors = SwitchDefaults.colors(checkedThumbColor = TGMagenta, checkedTrackColor = TGMagenta.copy(alpha = 0.4f))
+                                    )
                                 }
                             }
-                            .padding(10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = lang.nativeName,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (isActive) {
-                                    BadgeLabel("ACTIVE", TGMagenta)
-                                }
-                                if (lang.isRtl) {
-                                    BadgeLabel("RTL", TGViolet)
-                                }
+                            if (twoColLangs && pair.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
-                            Text(
-                                text = "${lang.displayName} • ${lang.region} • Key: ${lang.spacebarLabel}",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
-
-                        Switch(
-                            checked = isEnabled,
-                            onCheckedChange = { checked ->
-                                val newSet = enabledLangCodes.toMutableSet()
-                                if (checked) {
-                                    newSet.add(lang.code)
-                                } else if (newSet.size > 1) {
-                                    newSet.remove(lang.code)
-                                }
-                                scope.launch {
-                                    settingsManager.setEnabledLanguages(newSet)
-                                    if (!newSet.contains(activeLangCode)) {
-                                        newSet.firstOrNull()?.let { settingsManager.setActiveLanguageCode(it) }
-                                    }
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedThumbColor = TGMagenta, checkedTrackColor = TGMagenta.copy(alpha = 0.4f))
-                        )
                     }
                 }
             }
@@ -822,6 +850,7 @@ fun BackendlessVerificationScreen() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun GeneralSettingsScreen(settingsManager: SettingsManager) {
     val context = LocalContext.current
@@ -845,233 +874,298 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
     var testApiLoading by remember { mutableStateOf(false) }
     var testApiResult by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Settings & Appearance", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideSettings = maxWidth >= 680.dp
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Keyboard Theme", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        @Composable
+        fun ThemeCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Keyboard Theme", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
 
-                KeyboardTheme.entries.forEach { theme ->
-                    val isSelected = currentTheme == theme
-                    val themePreview = KeyboardThemeData.getColors(theme, context, isSystemDark)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { scope.launch { settingsManager.setKeyboardTheme(theme) } }
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = { scope.launch { settingsManager.setKeyboardTheme(theme) } },
-                            colors = RadioButtonDefaults.colors(selectedColor = TGMagenta)
-                        )
-                        Box(
+                    KeyboardTheme.entries.forEach { theme ->
+                        val isSelected = currentTheme == theme
+                        val themePreview = KeyboardThemeData.getColors(theme, context, isSystemDark)
+                        Row(
                             modifier = Modifier
-                                .size(18.dp)
-                                .clip(CircleShape)
-                                .background(themePreview.accent)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(theme.displayName, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-            }
-        }
-
-        PhotoBackgroundThemeCard(settingsManager = settingsManager)
-
-        PersonalShortcutsCard()
-
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Typing, Haptics & Layout Preferences", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-
-                SettingToggleRow(
-                    title = "Incognito Private Mode",
-                    subtitle = "Pause local word learning and clipboard logging while enabled",
-                    checked = isIncognitoMode,
-                    onCheckedChange = { scope.launch { settingsManager.setIncognitoMode(it) } },
-                    switchModifier = Modifier.testTag("toggle_incognito_mode")
-                )
-
-                SettingToggleRow(
-                    title = "Dedicated Number Row",
-                    subtitle = "Show 1-0 (or localized digits) above letter rows",
-                    checked = numberRowEnabled,
-                    onCheckedChange = { scope.launch { settingsManager.setNumberRowEnabled(it) } }
-                )
-
-                SettingToggleRow(
-                    title = "Auto-Capitalize Sentences",
-                    subtitle = "Automatically shift first letter after sentence punctuation",
-                    checked = autoCapitalize,
-                    onCheckedChange = { scope.launch { settingsManager.setAutoCapitalize(it) } }
-                )
-
-                SettingToggleRow(
-                    title = "Offline Spell Checker",
-                    subtitle = "Hunspell-style on-device autocorrect & fuzzy suggestions",
-                    checked = spellCheckEnabled,
-                    onCheckedChange = { scope.launch { settingsManager.setSpellCheckEnabled(it) } }
-                )
-
-                Text("Vibration Intensity", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    VibrationStrength.entries.forEach { strength ->
-                        FilterChip(
-                            selected = vibrationStrength == strength,
-                            onClick = { scope.launch { settingsManager.setVibrationStrength(strength) } },
-                            label = { Text(strength.label, fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                SettingToggleRow(
-                    title = "Sound on Keypress",
-                    subtitle = "Audible feedback when tapping keys",
-                    checked = soundOnKeyPress,
-                    onCheckedChange = { scope.launch { settingsManager.setSoundOnKeyPress(it) } }
-                )
-
-                AnimatedVisibility(visible = soundOnKeyPress) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Sound Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SoundProfile.entries.forEach { profile ->
-                                FilterChip(
-                                    selected = soundProfile == profile,
-                                    onClick = { scope.launch { settingsManager.setSoundProfile(profile) } },
-                                    label = { Text(profile.label, fontSize = 11.sp, maxLines = 1) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 48.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) TGMagenta.copy(alpha = 0.10f) else Color.Transparent)
+                                .clickable { scope.launch { settingsManager.setKeyboardTheme(theme) } }
+                                .padding(vertical = 4.dp, horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { scope.launch { settingsManager.setKeyboardTheme(theme) } },
+                                colors = RadioButtonDefaults.colors(selectedColor = TGMagenta)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(themePreview.accent)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = theme.displayName,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
+            }
+        }
 
-                SettingToggleRow(
-                    title = "Floating Keyboard Mode",
-                    subtitle = "Detach keyboard into a compact floating card",
-                    checked = floatingMode,
-                    onCheckedChange = { scope.launch { settingsManager.setFloatingMode(it) } }
-                )
+        @Composable
+        fun TypingPreferencesCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Typing, Haptics & Layout Preferences", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
 
-                Text("One-Handed & Split Mode", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OneHandedMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = oneHandedMode == mode,
-                            onClick = { scope.launch { settingsManager.setOneHandedMode(mode) } },
-                            label = { Text(mode.label, fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
+                    SettingToggleRow(
+                        title = "Incognito Private Mode",
+                        subtitle = "Pause local word learning and clipboard logging while enabled",
+                        checked = isIncognitoMode,
+                        onCheckedChange = { scope.launch { settingsManager.setIncognitoMode(it) } },
+                        switchModifier = Modifier.testTag("toggle_incognito_mode")
+                    )
+
+                    SettingToggleRow(
+                        title = "Dedicated Number Row",
+                        subtitle = "Show 1-0 (or localized digits) above letter rows",
+                        checked = numberRowEnabled,
+                        onCheckedChange = { scope.launch { settingsManager.setNumberRowEnabled(it) } }
+                    )
+
+                    SettingToggleRow(
+                        title = "Auto-Capitalize Sentences",
+                        subtitle = "Automatically shift first letter after sentence punctuation",
+                        checked = autoCapitalize,
+                        onCheckedChange = { scope.launch { settingsManager.setAutoCapitalize(it) } }
+                    )
+
+                    SettingToggleRow(
+                        title = "Offline Spell Checker",
+                        subtitle = "Hunspell-style on-device autocorrect & fuzzy suggestions",
+                        checked = spellCheckEnabled,
+                        onCheckedChange = { scope.launch { settingsManager.setSpellCheckEnabled(it) } }
+                    )
+
+                    Text("Vibration Intensity", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        VibrationStrength.entries.forEach { strength ->
+                            FilterChip(
+                                selected = vibrationStrength == strength,
+                                onClick = { scope.launch { settingsManager.setVibrationStrength(strength) } },
+                                label = { Text(strength.label, fontSize = 12.sp, maxLines = 1) }
+                            )
+                        }
                     }
-                }
 
-                Text("Keyboard Height", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    KeyboardHeightPreset.entries.forEach { preset ->
-                        FilterChip(
-                            selected = heightPreset == preset,
-                            onClick = { scope.launch { settingsManager.setKeyboardHeightPreset(preset) } },
-                            label = { Text(preset.label, fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f)
-                        )
+                    SettingToggleRow(
+                        title = "Sound on Keypress",
+                        subtitle = "Audible feedback when tapping keys",
+                        checked = soundOnKeyPress,
+                        onCheckedChange = { scope.launch { settingsManager.setSoundOnKeyPress(it) } }
+                    )
+
+                    AnimatedVisibility(visible = soundOnKeyPress) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Sound Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                SoundProfile.entries.forEach { profile ->
+                                    FilterChip(
+                                        selected = soundProfile == profile,
+                                        onClick = { scope.launch { settingsManager.setSoundProfile(profile) } },
+                                        label = { Text(profile.label, fontSize = 12.sp, maxLines = 1) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    SettingToggleRow(
+                        title = "Floating Keyboard Mode",
+                        subtitle = "Detach keyboard into a compact floating card",
+                        checked = floatingMode,
+                        onCheckedChange = { scope.launch { settingsManager.setFloatingMode(it) } }
+                    )
+
+                    Text("One-Handed & Split Mode", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        OneHandedMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = oneHandedMode == mode,
+                                onClick = { scope.launch { settingsManager.setOneHandedMode(mode) } },
+                                label = { Text(mode.label, fontSize = 12.sp, maxLines = 1) }
+                            )
+                        }
+                    }
+
+                    Text("Keyboard Height", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        KeyboardHeightPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = heightPreset == preset,
+                                onClick = { scope.launch { settingsManager.setKeyboardHeightPreset(preset) } },
+                                label = { Text(preset.label, fontSize = 12.sp, maxLines = 1) }
+                            )
+                        }
                     }
                 }
             }
         }
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TGMagenta)
-                    Text("Optional Direct Gemini AI", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                }
-
-                Text(
-                    text = "TypeGenius works 100% offline without an API key. If you enter your own Gemini API key, requests go directly from this device to Google's official API.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = apiKeyInput,
-                    onValueChange = { apiKeyInput = it },
-                    placeholder = { Text("AIzaSy...") },
-                    label = { Text("User Google Gemini API Key") },
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                settingsManager.setGeminiApiKey(apiKeyInput)
-                                Toast.makeText(context, "API Key saved locally", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Save Key")
+        @Composable
+        fun DirectGeminiCard() {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TGMagenta)
+                        Text("Optional Direct Gemini AI", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
 
-                    if (apiKeyInput.isNotBlank()) {
-                        OutlinedButton(
+                    Text(
+                        text = "TypeGenius works 100% offline without an API key. If you enter your own Gemini API key, requests go directly from this device to Google's official API.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        placeholder = { Text("AIzaSy...") },
+                        label = { Text("User Google Gemini API Key") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
                             onClick = {
-                                testApiLoading = true
-                                testApiResult = null
                                 scope.launch {
-                                    val res = GeminiDirectClient().executeDirectPrompt(
-                                        apiKey = apiKeyInput.trim(),
-                                        prompt = "Respond with 'Direct Connection Verified: TypeGenius AI Ready' in 7 words or less."
-                                    )
-                                    testApiLoading = false
-                                    res.onSuccess { testApiResult = "SUCCESS: $it" }
-                                        .onFailure { testApiResult = "ERROR: ${it.message}" }
+                                    settingsManager.setGeminiApiKey(apiKeyInput)
+                                    Toast.makeText(context, "API Key saved locally", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            modifier = Modifier.weight(1f)
+                            colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
+                            modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
                         ) {
-                            if (testApiLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                            else Text("Test Connection")
+                            Text("Save Key")
+                        }
+
+                        if (apiKeyInput.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    testApiLoading = true
+                                    testApiResult = null
+                                    scope.launch {
+                                        val res = GeminiDirectClient().executeDirectPrompt(
+                                            apiKey = apiKeyInput.trim(),
+                                            prompt = "Respond with 'Direct Connection Verified: TypeGenius AI Ready' in 7 words or less."
+                                        )
+                                        testApiLoading = false
+                                        res.onSuccess { testApiResult = "SUCCESS: $it" }
+                                            .onFailure { testApiResult = "ERROR: ${it.message}" }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
+                            ) {
+                                if (testApiLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                                else Text("Test Connection")
+                            }
+                        }
+                    }
+
+                    testApiResult?.let { res ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (res.startsWith("SUCCESS")) Color(0xFF1B3B2B) else Color(0xFF3B1B1B))
+                                .padding(10.dp)
+                        ) {
+                            Text(res, color = if (res.startsWith("SUCCESS")) Color(0xFF4CAF50) else Color(0xFFFF5252), fontSize = 12.sp)
                         }
                     }
                 }
+            }
+        }
 
-                testApiResult?.let { res ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (res.startsWith("SUCCESS")) Color(0xFF1B3B2B) else Color(0xFF3B1B1B))
-                            .padding(10.dp)
-                    ) {
-                        Text(res, color = if (res.startsWith("SUCCESS")) Color(0xFF4CAF50) else Color(0xFFFF5252), fontSize = 12.sp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            SettingsSectionHero(
+                title = "সেটিংস ও কাস্টমাইজেশন",
+                subtitle = "থিম, হাতের লেখা ফন্ট, সাউন্ড, ভাইব্রেশন ও ব্যক্তিগত শর্টকাট ম্যানেজ করুন",
+                badgeText = "PRO SETTINGS",
+                icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White) }
+            )
+
+            HandwritingFontSettingsCard(settingsManager = settingsManager)
+
+            if (isWideSettings) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ThemeCard()
+                        PhotoBackgroundThemeCard(settingsManager = settingsManager)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        TypingPreferencesCard()
+                        PersonalShortcutsCard()
+                        DirectGeminiCard()
                     }
                 }
+            } else {
+                ThemeCard()
+                PhotoBackgroundThemeCard(settingsManager = settingsManager)
+                TypingPreferencesCard()
+                PersonalShortcutsCard()
+                DirectGeminiCard()
             }
         }
     }
@@ -1086,13 +1180,15 @@ private fun SettingToggleRow(
     switchModifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(subtitle, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(
             checked = checked,
@@ -1115,6 +1211,7 @@ private fun BadgeLabel(text: String, color: Color) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
     val scope = rememberCoroutineScope()
@@ -1137,14 +1234,22 @@ fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("চেহারা ও লে-আউট (Appearance & Layout)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text("কিবোর্ডের সারি, উচ্চতা, প্রস্থ এবং লে-আউট কাস্টমাইজ করুন", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingsSectionHero(
+            title = "চেহারা ও লে-আউট (Layout)",
+            subtitle = "বাংলা হাতের লেখা ফন্ট, কী-বোর্ডের সারি, উচ্চতা ও এক হাতে ব্যবহারের সাইজ কাস্টমাইজ করুন",
+            badgeText = "CUSTOMIZE",
+            icon = { Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White) }
+        )
 
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        HandwritingFontSettingsCard(settingsManager = settingsManager)
+
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SettingToggleRow(
                     title = "নম্বর সারি চালু করুন",
                     subtitle = "একটি অতিরিক্ত সারি যোগ হবে",
@@ -1160,56 +1265,68 @@ fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
                 )
 
                 SettingToggleRow(
-                    title = "লং প্রেস হিপ্ট লুকান",
+                    title = "লং প্রেস হিন্ট লুকান",
                     subtitle = "পরিচ্ছন্ন চেহারার জন্য কী-এর কোণে থাকা ছোট লেখা লুকান",
                     checked = hideLongPressHints,
                     onCheckedChange = { scope.launch { settingsManager.setHideLongPressHints(it) } }
                 )
 
-                Text("কিবোর্დის উচ্চতা (পোর্ট্রেট): $heightPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("কিবোর্ডের উচ্চতা (পোর্ট্রেট): $heightPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(80, 90, 100, 110, 125).forEach { pct ->
                         FilterChip(
                             selected = heightPortrait == pct,
                             onClick = { scope.launch { settingsManager.setKeyboardHeightPortrait(pct) } },
-                            label = { Text("$pct%", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
+                            label = { Text("$pct%", fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
 
-                Text("কিবোর্დის উচ্চতা (ল্যান্ডস্কেপ): $heightLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("কিবোর্ডের উচ্চতা (ল্যান্ডস্কেপ): $heightLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(75, 90, 100, 115).forEach { pct ->
                         FilterChip(
                             selected = heightLandscape == pct,
                             onClick = { scope.launch { settingsManager.setKeyboardHeightLandscape(pct) } },
-                            label = { Text("$pct%", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
+                            label = { Text("$pct%", fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
 
-                Text("এক হাতে কিবোর্দের প্রস্থ (পোর্ট্রেট): $oneHandedPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("এক হাতে কিবোর্ডের প্রস্থ (পোর্ট্রেট): $oneHandedPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(70, 80, 85, 95, 100).forEach { pct ->
                         FilterChip(
                             selected = oneHandedPortrait == pct,
                             onClick = { scope.launch { settingsManager.setOneHandedWidthPortrait(pct) } },
-                            label = { Text("$pct%", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
+                            label = { Text("$pct%", fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
 
-                Text("এক হাতে কিবোর্দের প্রস্থ (ল্যান্ডস্কেপ): $oneHandedLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("এক হাতে কিবোর্ডের প্রস্থ (ল্যান্ডস্কেপ): $oneHandedLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(35, 40, 50, 60).forEach { pct ->
                         FilterChip(
                             selected = oneHandedLandscape == pct,
                             onClick = { scope.launch { settingsManager.setOneHandedWidthLandscape(pct) } },
-                            label = { Text("$pct%", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f)
+                            label = { Text("$pct%", fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }
@@ -1234,7 +1351,7 @@ fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
 
                 SettingToggleRow(
                     title = "সব সময় এন্টার বাটন",
-                    subtitle = "এন্টার বাটনে সবসময় রটার্ন আইকন দেখান",
+                    subtitle = "এন্টার বাটনে সবসময় রিটার্ন আইকন দেখান",
                     checked = alwaysEnter,
                     onCheckedChange = { scope.launch { settingsManager.setAlwaysEnterButton(it) } }
                 )

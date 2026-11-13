@@ -24,19 +24,49 @@ class DictionaryManager(context: Context) {
         "than", "then", "now", "look", "only", "come", "its", "over", "think", "also",
         "back", "after", "use", "two", "how", "our", "work", "first", "well", "way",
         "even", "new", "want", "because", "any", "these", "give", "day", "most", "us",
-        "keyboard", "typegenius", "smart", "awesome", "fast", "great", "hello", "thanks",
-        "please", "morning", "night", "today", "tomorrow", "friend", "happy", "welcome",
-        "message", "typing", "offline", "translate", "language", "private", "secure"
+        "am", "is", "are", "was", "were", "been", "being", "has", "had", "does",
+        "did", "doing", "done", "should", "could", "would", "must", "might", "may", "shall",
+        "very", "much", "many", "more", "most", "less", "better", "best", "worse", "worst",
+        "always", "never", "often", "sometimes", "usually", "really", "actually", "probably",
+        "definitely", "perhaps", "maybe", "almost", "already", "still", "yet", "soon",
+        "here", "where", "why", "while", "before", "during", "until", "since", "through",
+        "between", "around", "again", "away", "together", "everything", "everyone", "someone",
+        "anyone", "nothing", "anything", "something", "different", "important", "possible",
+        "necessary", "interesting", "beautiful", "amazing", "wonderful", "perfect", "awesome",
+        "great", "happy", "sorry", "thank", "thanks", "please", "welcome", "hello", "goodbye",
+        "morning", "afternoon", "evening", "night", "today", "tomorrow", "yesterday", "week",
+        "month", "hour", "minute", "second", "friend", "family", "mother", "father", "brother",
+        "sister", "home", "house", "school", "college", "office", "city", "country", "world",
+        "water", "food", "coffee", "tea", "book", "phone", "computer", "screen", "keyboard",
+        "typegenius", "smart", "fast", "message", "typing", "offline", "translate", "translation",
+        "language", "grammar", "spelling", "correct", "correction", "sentence", "word", "letter",
+        "private", "secure", "question", "answer", "problem", "solution", "idea", "reason",
+        "example", "experience", "remember", "forget", "understand", "believe", "receive",
+        "separate", "achieve", "occurred", "recommend", "environment", "government", "independent",
+        "knowledge", "management", "occasion", "surprise", "truly", "argument", "beginning",
+        "calendar", "coming", "congratulations", "disappoint", "existence", "familiar", "foreign",
+        "happened", "immediately", "maintenance", "noticeable", "professional", "quiet", "reference",
+        "similar", "strength", "writing", "speak", "talk", "listen", "read", "write", "learn",
+        "study", "teach", "help", "need", "love", "feel", "agree", "start", "finish", "try",
+        "keep", "send", "call", "wait", "live", "stay", "play", "watch", "eat", "drink", "sleep",
+        "apple", "orange", "umbrella", "university", "useful", "honest", "elephant", "email"
     )
 
     private val bengaliWords = listOf(
-        "আমি", "তুমি", "আপনি", "সে", "তারা", "আমরা", "তোমরা", "আমার", "তোমার", "আমাদের",
-        "কেমন", "আছো", "আছেন", "ভালো", "সুন্দর", "ধন্যবাদ", "বাংলা", "বাংলাদেশ", "ভাষা", "দেশ",
-        "সোনার", "বন্ধু", "কথা", "কাজ", "খাবার", "পানি", "জল", "কি", "কী", "কেন",
-        "কোথায়", "কবে", "কিভাবে", "ঠিক", "খুব", "একটা", "অনেক", "সব", "মানুষ", "জীবন",
-        "নতুন", "ঘর", "বাসা", "শহর", "গ্রাম", "নদী", "পাখি", "গান", "গল্প", "বইঘর",
-        "বই", "কলম", "খাতা", "সময়", "দিন", "আজকে", "আজ", "কাল", "সাথে", "পরে",
-        "সকাল", "রাত", "মা", "বাবা", "ভাই", "বোন", "ভালোবাসা", "শুভ", "স্বাগতম", "অভিনন্দন"
+        "আমি", "তুমি", "আপনি", "সে", "তারা", "আমরা", "তোমরা", "আমার", "তোমার", "আপনার", "আমাদের",
+        "কেমন", "আছি", "আছো", "আছেন", "আছে", "নেই", "নাই", "ভালো", "সুন্দর", "খুব", "অনেক",
+        "ধন্যবাদ", "স্বাগতম", "অভিনন্দন", "দুঃখিত", "শুকরিয়া", "বাংলা", "বাংলাদেশ", "ভাষা", "দেশ",
+        "সোনার", "বন্ধু", "কথা", "কাজ", "খাবার", "পানি", "জল", "চা", "ভাত", "কী", "কি", "কেন",
+        "কোথায়", "কবে", "কীভাবে", "কিভাবে", "কখন", "কারণ", "জন্য", "সাথে", "একসাথে", "পরে", "আগে",
+        "ঠিক", "ভুল", "সঠিক", "শুদ্ধ", "নিশ্চয়", "অবশ্যই", "আসলে", "এখন", "এখনো", "তাহলে", "কিন্তু",
+        "এবং", "অথবা", "যদি", "একটা", "একটি", "অনেকগুলো", "সব", "সবাই", "মানুষ", "জীবন", "মন",
+        "হৃদয়", "ভালোবাসা", "ভালোবাসি", "নতুন", "পুরাতন", "ঘর", "বাড়ি", "বাসা", "শহর", "গ্রাম",
+        "নদী", "পাখি", "আকাশ", "বৃষ্টি", "গান", "গল্প", "বইঘর", "বই", "কলম", "খাতা", "স্কুল", "কলেজ",
+        "সময়", "দিন", "আজকে", "আজ", "কাল", "সকাল", "দুপুর", "বিকাল", "সন্ধ্যা", "রাত",
+        "মা", "বাবা", "ভাই", "বোন", "দাদা", "দিদি", "পরিবার", "শিক্ষক", "ছাত্র",
+        "করি", "করো", "করুন", "করছি", "করছে", "করবো", "যাই", "যাও", "যান", "যাচ্ছি", "যাবো",
+        "আসি", "আসো", "আসুন", "দেখি", "দেখো", "দেখুন", "বলি", "বলো", "বলুন", "লিখি", "লিখছি",
+        "পড়ি", "পড়ছি", "শুরু", "শেষ", "সত্যি", "পরীক্ষা", "বুদ্ধি", "সাধারণ", "ব্যবহার", "সমস্যা", "সমাধান"
     )
 
     private val assameseWords = listOf(
@@ -161,6 +191,12 @@ class DictionaryManager(context: Context) {
 
         val results = mutableListOf<String>()
 
+        // 0. Instant exact typo/contraction fix first (e.g. "teh" -> "the", "dont" -> "don't", "im" -> "I'm")
+        val directFix = if (spellCheckEnabled) OfflineSpellChecker.directCorrectionFor(clean) else null
+        if (directFix != null) {
+            results.add(directFix)
+        }
+
         // 1. Check local learned words from Room SQLite
         val langCode = languageId.code
         try {
@@ -173,7 +209,7 @@ class DictionaryManager(context: Context) {
         val prefixMatches = dict.filter { it.startsWith(clean, ignoreCase = true) && !it.equals(clean, ignoreCase = true) }
         results.addAll(prefixMatches)
 
-        // 3. Hunspell-style offline fuzzy spell correction when no/few prefix matches found
+        // 3. Hunspell-style proximity fuzzy spell correction when no/few prefix matches found
         if (spellCheckEnabled && clean.length >= 2) {
             val spellCorrections = OfflineSpellChecker.correctOrSuggest(clean, dict, maxDistance = 2, limit = 3)
             results.addAll(spellCorrections)

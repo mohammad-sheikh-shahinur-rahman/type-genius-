@@ -188,10 +188,20 @@ object KeyboardLayouts {
     ): List<List<KeyAction>> {
         val row1 = listOf("q" to "1", "w" to "2", "e" to "3", "r" to "4", "t" to "5", "y" to "6", "u" to "7", "i" to "8", "o" to "9", "p" to "0")
         val row2 = listOf("a" to "@", "s" to "#", "d" to "$", "f" to "%", "g" to "&", "h" to "-", "j" to "+", "k" to "(", "l" to ")")
-        val row3 = listOf("z" to "*", "x" to "\"", "c" to "'", "v" to ":", "b" to ";", "n" to "!", "m" to "?")
+        val row3 = listOf("z" to "*", "x" to "\"", "c" to "Copy", "v" to "Paste", "b" to ";", "n" to "!", "m" to "?")
 
         fun toKey(char: String, fallbackSec: String): KeyAction {
             val text = if (isShifted) char.uppercase() else char
+            if (char == "c" && extraAccents.containsKey("c")) {
+                val accent = extraAccents["c"]!!.let { if (isShifted) it.uppercase() else it }
+                return KeyAction(text, "Copy", KeyType.CHARACTER, extraVariants = listOf("Copy", accent))
+            }
+            if (char == "c") {
+                return KeyAction(text, "Copy", KeyType.CHARACTER, extraVariants = listOf("Copy", "'"))
+            }
+            if (char == "v") {
+                return KeyAction(text, "Paste", KeyType.CHARACTER, extraVariants = listOf("Paste", ":"))
+            }
             val sec = extraAccents[char]?.let { if (isShifted) it.uppercase() else it } ?: fallbackSec
             return KeyAction(text, sec, KeyType.CHARACTER)
         }
