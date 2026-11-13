@@ -81,6 +81,7 @@ import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
 import com.example.model.VibrationStrength
 import com.example.ui.keyboard.KeyboardThemeData
+import com.example.ui.keyboard.SpacebarSwipeTutorialOverlay
 import com.example.ui.theme.TGMagenta
 import com.example.ui.theme.TGViolet
 import kotlinx.coroutines.Dispatchers
@@ -372,7 +373,9 @@ fun OfflineTranslatorCard(settingsManager: SettingsManager) {
 
 @Composable
 fun GestureSettingsScreen(settingsManager: SettingsManager) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var showTutorial by remember { mutableStateOf(false) }
 
     val isSwipeEnabled by settingsManager.isSpacebarSwipeEnabled.collectAsState(initial = true)
     val swipeSensitivity by settingsManager.swipeSensitivity.collectAsState(initial = SwipeSensitivity.MEDIUM)
@@ -383,6 +386,7 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
     val isGlideEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
     val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -392,6 +396,34 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
     ) {
         Text("Spacebar & Typing Gestures", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Text("Configure offline Glide swipe-to-type, Backspace swipe delete, and Spacebar language switching.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = TGMagenta.copy(alpha = 0.15f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showTutorial = true }
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(TGMagenta),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("💡", fontSize = 20.sp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Interactive Spacebar Swipe Tutorial", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Launch live gesture tutorial to master language switching.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
 
         Card(
             shape = RoundedCornerShape(16.dp),
@@ -480,6 +512,18 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
                 )
             }
         }
+    }
+
+    if (showTutorial) {
+        SpacebarSwipeTutorialOverlay(
+            colors = KeyboardThemeData.getColors(KeyboardTheme.MATERIAL_YOU, context, false),
+            enabledLanguages = listOf(LanguageId.BANGLA_PROBHAT, LanguageId.ENGLISH, LanguageId.HINDI, LanguageId.SYLHETI),
+            onDismiss = { showTutorial = false },
+            onSwipeSuccess = {
+                Toast.makeText(context, "Great job! Language switched successfully.", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
     }
 }
 

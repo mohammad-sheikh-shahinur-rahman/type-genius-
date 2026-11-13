@@ -40,7 +40,9 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.SwapHoriz
+import com.example.ui.keyboard.SpacebarSwipeTutorialOverlay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card

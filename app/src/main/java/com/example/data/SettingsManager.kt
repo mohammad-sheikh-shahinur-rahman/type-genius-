@@ -61,6 +61,7 @@ class SettingsManager(private val context: Context) {
         val KEY_ONE_HANDED_LANDSCAPE = intPreferencesKey("one_handed_width_landscape")
         val KEY_SPLIT_FOLDABLE = booleanPreferencesKey("split_keyboard_foldable")
         val KEY_ALWAYS_ENTER = booleanPreferencesKey("always_enter_button")
+        val KEY_HAS_SEEN_SWIPE_TUTORIAL = booleanPreferencesKey("has_seen_swipe_tutorial")
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -313,4 +314,7 @@ class SettingsManager(private val context: Context) {
     suspend fun setOneHandedWidthLandscape(pct: Int) { context.dataStore.edit { it[KEY_ONE_HANDED_LANDSCAPE] = pct.coerceIn(30, 90) } }
     suspend fun setSplitKeyboardFoldable(enabled: Boolean) { context.dataStore.edit { it[KEY_SPLIT_FOLDABLE] = enabled } }
     suspend fun setAlwaysEnterButton(enabled: Boolean) { context.dataStore.edit { it[KEY_ALWAYS_ENTER] = enabled } }
+
+    val hasSeenSwipeTutorial: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_HAS_SEEN_SWIPE_TUTORIAL] ?: false }
+    suspend fun setHasSeenSwipeTutorial(seen: Boolean) { context.dataStore.edit { it[KEY_HAS_SEEN_SWIPE_TUTORIAL] = seen } }
 }
