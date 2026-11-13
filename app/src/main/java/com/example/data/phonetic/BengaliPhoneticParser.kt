@@ -187,17 +187,44 @@ object BengaliPhoneticParser {
         "prem" to listOf("প্রেম"),
         "bhalobasha" to listOf("ভালোবাসা"),
         "valobasha" to listOf("ভালোবাসা"),
-        "shukriya" to listOf("শুকরিয়া")
+        "shukriya" to listOf("শুকরিয়া"),
+        "prithibi" to listOf("পৃথিবী"),
+        "krishi" to listOf("কৃষি"),
+        "bristi" to listOf("বৃষ্টি"),
+        "hridoy" to listOf("হৃদয়"),
+        "rito" to listOf("ঋতু"),
+        "prothom" to listOf("প্রথম"),
+        "proshno" to listOf("প্রশ্ন"),
+        "proyojon" to listOf("প্রয়োজন"),
+        "byabohar" to listOf("ব্যবহার"),
+        "byasto" to listOf("ব্যস্ত"),
+        "satya" to listOf("সত্য"),
+        "sotto" to listOf("সত্য"),
+        "dhormo" to listOf("ধর্ম"),
+        "kormo" to listOf("কর্ম"),
+        "shikkha" to listOf("শিক্ষা"),
+        "biggan" to listOf("বিজ্ঞান"),
+        "onchol" to listOf("অঞ্চল"),
+        "hotath" to listOf("হঠাৎ"),
+        "utshob" to listOf("উৎসব"),
+        "hothat" to listOf("হঠাৎ"),
+        "srishti" to listOf("সৃষ্টি"),
+        "drishti" to listOf("দৃষ্টি"),
+        "swadhin" to listOf("স্বাধীন"),
+        "swopno" to listOf("স্বপ্ন")
     )
 
     private val consonants = mapOf(
         "kkh" to "ক্ষ",
         "jny" to "জ্ঞ",
         "cch" to "চ্ছ",
-        "kkh" to "ক্ষ",
+        "nch" to "ঞ্ছ",
+        "nc" to "ঞ্চ",
+        "nj" to "ঞ্জ",
         "kh" to "খ",
         "gh" to "ঘ",
         "ng" to "ঙ",
+        "NG" to "ঞ",
         "ch" to "চ",
         "chh" to "ছ",
         "jh" to "ঝ",
@@ -212,6 +239,7 @@ object BengaliPhoneticParser {
         "g" to "গ",
         "j" to "জ",
         "z" to "য",
+        "Z" to "\u09CD\u09AF",
         "t" to "ত",
         "T" to "ট",
         "d" to "দ",
@@ -234,6 +262,7 @@ object BengaliPhoneticParser {
     )
 
     private val initialVowels = mapOf(
+        "rri" to "ঋ",
         "aa" to "আ",
         "ee" to "ঈ",
         "oo" to "ঊ",
@@ -252,6 +281,7 @@ object BengaliPhoneticParser {
     )
 
     private val vowelKars = mapOf(
+        "rri" to "ৃ",
         "aa" to "া",
         "ee" to "ী",
         "oo" to "ূ",
@@ -318,6 +348,26 @@ object BengaliPhoneticParser {
             val sub2 = if (i + 2 <= input.length) input.substring(i, i + 2) else null
             val sub1 = input.substring(i, i + 1)
 
+            // Explicit hasanta (,,)
+            if (sub2 == ",,") {
+                sb.append("্")
+                i += 2
+                isAfterConsonant = false
+                continue
+            }
+
+            // Vowel kar/initial 'rri' takes priority over 'r'+'r'+'i'
+            if (sub3 == "rri") {
+                if (isAfterConsonant) {
+                    sb.append("ৃ")
+                } else {
+                    sb.append("ঋ")
+                }
+                i += 3
+                isAfterConsonant = false
+                continue
+            }
+
             if (sub3 != null && consonants.containsKey(sub3)) {
                 sb.append(consonants[sub3])
                 i += 3
@@ -332,8 +382,26 @@ object BengaliPhoneticParser {
                 continue
             }
 
+            // Phola / conjunct shortcuts after consonant: Z -> য-ফলা, r followed by vowel/end -> র-ফলা? Only when explicit or cluster
+            if (sub1 == "Z" && isAfterConsonant) {
+                sb.append("\u09CD\u09AF")
+                i += 1
+                isAfterConsonant = true
+                continue
+            }
+
             if (consonants.containsKey(sub1)) {
-                sb.append(consonants[sub1])
+                if (isAfterConsonant && sub1 in listOf("r", "y", "l", "w") && sb.isNotEmpty() && !sb.endsWith("্")) {
+                    // Auto-conjunct phola for natural phonetic clusters (e.g., pr -> প্র, ky -> ক্য, sw -> স্ব, kl -> ক্ল)
+                    when (sub1) {
+                        "r" -> sb.append("\u09CD\u09B0")
+                        "y" -> sb.append("\u09CD\u09AF")
+                        "l" -> sb.append("\u09CD\u09B2")
+                        "w" -> sb.append("\u09CD\u09AC")
+                    }
+                } else {
+                    sb.append(consonants[sub1])
+                }
                 i += 1
                 isAfterConsonant = true
                 continue

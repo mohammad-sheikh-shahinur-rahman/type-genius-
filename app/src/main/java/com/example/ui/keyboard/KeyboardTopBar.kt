@@ -243,7 +243,7 @@ fun KeyboardTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(colors.suggestionBackground)
             .padding(horizontal = 4.dp),

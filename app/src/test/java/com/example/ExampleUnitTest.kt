@@ -113,6 +113,56 @@ class ExampleUnitTest {
     }
 
     @Test
+    fun testBengaliLayouts_containAllVowelsKarsConsonantsAndPholas() {
+        val requiredCharsAndSigns = listOf(
+            // Vowels
+            "অ", "আ", "ই", "ঈ", "উ", "ঊ", "ঋ", "এ", "ঐ", "ও", "ঔ",
+            // Kars
+            "া", "ি", "ী", "ু", "ূ", "ৃ", "ে", "ৈ", "ো", "ৌ",
+            // Consonants & modifiers
+            "ক", "খ", "গ", "ঘ", "ঙ",
+            "চ", "ছ", "জ", "ঝ", "ঞ",
+            "ট", "ঠ", "ড", "ঢ", "ণ",
+            "ত", "থ", "দ", "ধ", "ন",
+            "প", "ফ", "ব", "ভ", "ম",
+            "য", "র", "ল",
+            "শ", "ষ", "স", "হ",
+            "ড়", "ঢ়", "য়", "ৎ", "ং", "ঃ", "ঁ", "্",
+            // Pholas & Reph
+            "\u09CD\u09B0", // র-ফলা
+            "\u09CD\u09AF", // য-ফলা
+            "\u09B0\u09CD", // রেফ
+            "\u09CD\u09AC", // ব-ফলা
+            "\u09CD\u09AE", // ম-ফলা
+            "\u09CD\u09A8", // ন-ফলা
+            "\u09CD\u09B2"  // ল-ফলা
+        )
+
+        listOf(LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_NATIONAL).forEach { lang ->
+            val allTokens = (KeyboardLayouts.getAlphabetRows(lang, false) + KeyboardLayouts.getAlphabetRows(lang, true))
+                .flatten()
+                .flatMap { key ->
+                    buildList {
+                        add(key.label)
+                        key.secondaryLabel?.let { add(it) }
+                        addAll(key.extraVariants)
+                    }
+                }
+                .toSet()
+
+            requiredCharsAndSigns.forEach { sign ->
+                assertTrue("Missing '$sign' in $lang layout", allTokens.contains(sign))
+            }
+        }
+
+        assertTrue(com.example.model.KeyboardHeightPreset.NORMAL.rowHeightDp >= 56)
+        assertTrue(BengaliPhoneticParser.parsePhonetic("krishi").contains("কৃষি"))
+        assertTrue(BengaliPhoneticParser.parsePhonetic("prothom").contains("প্রথম"))
+        assertTrue(BengaliPhoneticParser.parsePhonetic("NG").contains("ঞ"))
+        assertTrue(BengaliPhoneticParser.parsePhonetic("prri").firstOrNull() == "পৃ")
+    }
+
+    @Test
     fun testLanguageId_cyclingAndRtlFlags() {
         val languages = listOf(
             LanguageId.BANGLA_PROBHAT,

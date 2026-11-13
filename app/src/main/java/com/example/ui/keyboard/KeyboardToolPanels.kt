@@ -90,7 +90,7 @@ fun NumpadPanel(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(58.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 row.forEach { label ->
@@ -169,7 +169,7 @@ fun TextEditorPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(152.dp),
+                .height(186.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Col 1: Tall Left Arrow (<)
@@ -298,7 +298,7 @@ fun TextEditorPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(46.dp),
+                .height(56.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             EditorTextTile(
@@ -442,7 +442,7 @@ fun MoreToolsPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(212.dp)
+                .height(248.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {

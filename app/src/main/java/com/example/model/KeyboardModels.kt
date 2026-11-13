@@ -92,9 +92,9 @@ enum class OneHandedMode(val id: String, val label: String) {
 }
 
 enum class KeyboardHeightPreset(val id: String, val rowHeightDp: Int, val label: String) {
-    COMPACT("compact", 39, "Compact"),
-    NORMAL("normal", 45, "Normal"),
-    TALL("tall", 51, "Tall");
+    COMPACT("compact", 56, "Compact"),
+    NORMAL("normal", 66, "Normal"),
+    TALL("tall", 76, "Tall");
 
     companion object {
         fun fromId(id: String): KeyboardHeightPreset = entries.find { it.id == id } ?: NORMAL
@@ -140,7 +140,8 @@ data class KeyAction(
     val label: String,
     val secondaryLabel: String? = null,
     val type: KeyType,
-    val weight: Float = 1.0f
+    val weight: Float = 1.0f,
+    val extraVariants: List<String> = emptyList()
 )
 
 enum class KeyType {

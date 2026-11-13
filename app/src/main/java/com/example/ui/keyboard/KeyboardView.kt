@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,6 +99,7 @@ import com.example.model.VibrationStrength
 import com.example.service.VoiceInputController
 import java.io.File
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -183,6 +186,10 @@ fun KeyboardView(
     val isIncognitoMode by settingsManager.isIncognitoMode.collectAsState(initial = false)
     val isGlideTypingEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
     val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
+    val largeNumberRow by settingsManager.largeNumberRow.collectAsState(initial = false)
+    val hideLongPressHints by settingsManager.hideLongPressHints.collectAsState(initial = false)
+    val heightPortraitPct by settingsManager.keyboardHeightPortrait.collectAsState(initial = 100)
+    val heightLandscapePct by settingsManager.keyboardHeightLandscape.collectAsState(initial = 100)
 
     val wallpaperBitmap = remember(wallpaperPath) {
         if (wallpaperPath.isNotBlank()) {
@@ -297,12 +304,14 @@ fun KeyboardView(
             oneHandedMode == OneHandedMode.LEFT || oneHandedMode == OneHandedMode.RIGHT -> 0.87f
             else -> 1f
         }
+        val heightScale = (if (isWide) heightLandscapePct else heightPortraitPct) / 100f
+        val scaledRowDp = heightPreset.rowHeightDp * heightScale
         val responsiveRowHeight = when {
-            isNarrow -> (heightPreset.rowHeightDp - 4).dp
-            isWide -> (heightPreset.rowHeightDp + 4).dp
-            else -> heightPreset.rowHeightDp.dp
+            isNarrow -> (scaledRowDp - 3f).dp
+            isWide -> (scaledRowDp + 4f).dp
+            else -> scaledRowDp.dp
         }
-        val responsiveGap = if (isNarrow) 3.dp else 4.dp
+        val responsiveGap = if (isNarrow) 2.dp else 3.dp
 
         if (wallpaperBitmap != null) {
             Image(
@@ -322,7 +331,7 @@ fun KeyboardView(
             modifier = Modifier
                 .fillMaxWidth(widthFraction)
                 .widthIn(max = if (isWide) 840.dp else 680.dp)
-                .padding(horizontal = 5.dp, vertical = 5.dp)
+                .padding(horizontal = 2.dp, vertical = 4.dp)
         ) {
             // 0. Docked Live Translator Overlay above active keyboard (Screenshots 1 & 3)
             if (isTranslatorOpen) {
@@ -572,15 +581,17 @@ fun KeyboardView(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(responsiveRowHeight - 6.dp)
+                                .height(if (largeNumberRow) responsiveRowHeight else (responsiveRowHeight - 4.dp))
                                 .zIndex(2f),
                             horizontalArrangement = Arrangement.spacedBy(responsiveGap)
                         ) {
                             val numSplit = if (isSplitMode) nums.size / 2 else nums.size
-                            nums.take(numSplit).forEach { key ->
+                            nums.take(numSplit).forEachIndexed { idx, key ->
                                 KeyView(
                                     keyAction = key,
                                     colors = colors,
+                                    hideSecondaryHint = hideLongPressHints,
+                                    alignPopupEnd = idx >= nums.size / 2,
                                     modifier = Modifier.weight(key.weight),
                                     onClick = {
                                         haptic()
@@ -594,10 +605,12 @@ fun KeyboardView(
                             }
                             if (isSplitMode) {
                                 Spacer(modifier = Modifier.width(splitGap))
-                                nums.drop(numSplit).forEach { key ->
+                                nums.drop(numSplit).forEachIndexed { idx, key ->
                                     KeyView(
                                         keyAction = key,
                                         colors = colors,
+                                        hideSecondaryHint = hideLongPressHints,
+                                        alignPopupEnd = true,
                                         modifier = Modifier.weight(key.weight),
                                         onClick = {
                                             haptic()
@@ -674,6 +687,7 @@ fun KeyboardView(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             rows.forEachIndexed { rowIndex, rowKeys ->
                                 val splitAt = if (isSplitMode) (rowKeys.size + 1) / 2 else rowKeys.size
+                                val isDenseRow = rowKeys.size >= 11
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -683,12 +697,15 @@ fun KeyboardView(
                                     horizontalArrangement = Arrangement.spacedBy(responsiveGap)
                                 ) {
                                     @Composable
-                                    fun renderKey(key: KeyAction) {
+                                    fun renderKey(key: KeyAction, keyIdx: Int) {
                                         val isShiftActive = key.type == KeyType.SHIFT && (isShifted || isCapsLock)
                                         KeyView(
                                             keyAction = key,
                                             colors = colors,
                                             isHighlight = isShiftActive,
+                                            hideSecondaryHint = hideLongPressHints,
+                                            alignPopupEnd = keyIdx >= rowKeys.size / 2,
+                                            isCompactRow = isDenseRow,
                                             modifier = Modifier
                                                 .weight(key.weight)
                                                 .then(
@@ -727,10 +744,10 @@ fun KeyboardView(
                                         )
                                     }
 
-                                    rowKeys.take(splitAt).forEach { renderKey(it) }
+                                    rowKeys.take(splitAt).forEachIndexed { idx, key -> renderKey(key, idx) }
                                     if (isSplitMode && splitAt < rowKeys.size) {
                                         Spacer(modifier = Modifier.width(splitGap))
-                                        rowKeys.drop(splitAt).forEach { renderKey(it) }
+                                        rowKeys.drop(splitAt).forEachIndexed { idx, key -> renderKey(key, splitAt + idx) }
                                     }
                                 }
                             }
@@ -830,7 +847,7 @@ fun KeyboardView(
                                 Text(
                                     text = langBadge,
                                     color = colors.accent,
-                                    fontSize = if (langBadge.length > 1) 14.sp else 18.sp,
+                                    fontSize = if (langBadge.length > 1) 17.sp else 23.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -948,7 +965,7 @@ fun KeyboardView(
                                 imageVector = Icons.Default.Mood,
                                 contentDescription = "Emoji",
                                 tint = colors.textPrimary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
@@ -1078,6 +1095,21 @@ fun KeyboardView(
     }
 }
 
+private fun formatBengaliSignForDisplay(raw: String): String {
+    return when (raw) {
+        "\u09CD\u09B0" -> "\u25CC\u09CD\u09B0"
+        "\u09CD\u09AF" -> "\u25CC\u09CD\u09AF"
+        "\u09CD\u09AF\u09BE" -> "\u25CC\u09CD\u09AF\u09BE"
+        "\u09B0\u09CD" -> "\u09B0\u09CD\u25CC"
+        "\u09CD\u09AC" -> "\u25CC\u09CD\u09AC"
+        "\u09CD\u09AE" -> "\u25CC\u09CD\u09AE"
+        "\u09CD\u09A8" -> "\u25CC\u09CD\u09A8"
+        "\u09CD\u09B2" -> "\u25CC\u09CD\u09B2"
+        "া", "ি", "ী", "ু", "ূ", "ৃ", "ে", "ৈ", "ো", "ৌ", "্", "ং", "ঃ", "ঁ" -> "\u25CC$raw"
+        else -> raw
+    }
+}
+
 @Composable
 fun KeyView(
     keyAction: KeyAction,
@@ -1085,6 +1117,9 @@ fun KeyView(
     modifier: Modifier = Modifier,
     isHighlight: Boolean = false,
     isEnterKey: Boolean = false,
+    hideSecondaryHint: Boolean = false,
+    alignPopupEnd: Boolean = false,
+    isCompactRow: Boolean = false,
     shape: Shape = RoundedCornerShape(9.dp),
     customBgColor: Color? = null,
     onClick: () -> Unit,
@@ -1097,9 +1132,19 @@ fun KeyView(
     val density = LocalDensity.current
     var isPressed by remember { mutableStateOf(false) }
     var showPreviewPopup by remember { mutableStateOf(false) }
+    var selectedVariantIdx by remember { mutableIntStateOf(0) }
     val coroutineScope = rememberCoroutineScope()
     val dragAwayThresholdPx = with(density) { 18.dp.toPx() }
     val swipeDeleteStepPx = with(density) { 30.dp.toPx() }
+    val variantStepPx = with(density) { 38.dp.toPx() }
+
+    val variants = remember(keyAction) {
+        if (keyAction.extraVariants.isNotEmpty()) {
+            keyAction.extraVariants
+        } else {
+            listOfNotNull(keyAction.secondaryLabel)
+        }
+    }
 
     val bg = when {
         isEnterKey -> colors.enterKeyBackground
@@ -1116,6 +1161,12 @@ fun KeyView(
         else -> colors.textPrimary
     }
 
+    val displayPrimary = remember(keyAction.label) { formatBengaliSignForDisplay(keyAction.label) }
+    val displaySecondary = remember(keyAction.secondaryLabel) {
+        keyAction.secondaryLabel?.let { formatBengaliSignForDisplay(it) }
+    }
+    val hasSecondary = displaySecondary != null && !hideSecondaryHint
+
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -1128,15 +1179,16 @@ fun KeyView(
                     keyAction.label
                 }
             }
-            .pointerInput(keyAction, onBackspaceSwipeWord != null, onBackspaceRepeat != null) {
+            .pointerInput(keyAction, variants, alignPopupEnd, onBackspaceSwipeWord != null, onBackspaceRepeat != null) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     isPressed = true
+                    selectedVariantIdx = 0
                     var isLongClickFired = false
                     var draggedAway = false
                     var swipeDeleteConsumed = false
                     var lastSwipeX = down.position.x
-                    val longPressTimeoutMs = 280L
+                    val longPressTimeoutMs = 260L
 
                     var job: kotlinx.coroutines.Job? = null
                     if (keyAction.type == KeyType.BACKSPACE && onBackspaceRepeat != null) {
@@ -1148,11 +1200,12 @@ fun KeyView(
                                 delay(70L)
                             }
                         }
-                    } else if (keyAction.secondaryLabel != null && onLongClick != null) {
+                    } else if (variants.isNotEmpty() && onLongClick != null) {
                         job = coroutineScope.launch {
                             delay(longPressTimeoutMs)
                             if (isPressed && !draggedAway) {
                                 isLongClickFired = true
+                                selectedVariantIdx = 0
                                 showPreviewPopup = true
                                 onPopupStateChange?.invoke(true)
                                 view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -1167,8 +1220,9 @@ fun KeyView(
                         if (!change.pressed) {
                             job?.cancel()
                             if (!draggedAway && !swipeDeleteConsumed) {
-                                if (isLongClickFired && keyAction.secondaryLabel != null) {
-                                    onLongClick?.invoke(keyAction.secondaryLabel)
+                                if (isLongClickFired && variants.isNotEmpty()) {
+                                    val chosen = variants.getOrElse(selectedVariantIdx) { variants.first() }
+                                    onLongClick?.invoke(chosen)
                                 } else if (!isLongClickFired) {
                                     onClick()
                                 }
@@ -1186,17 +1240,23 @@ fun KeyView(
                                 onBackspaceSwipeWord()
                             }
                         } else if (keyAction.type == KeyType.CHARACTER) {
-                            val dist = hypot(
-                                change.position.x - down.position.x,
-                                change.position.y - down.position.y
-                            )
-                            if (dist > dragAwayThresholdPx) {
-                                draggedAway = true
-                                isPressed = false
-                                job?.cancel()
-                                if (showPreviewPopup) {
-                                    showPreviewPopup = false
-                                    onPopupStateChange?.invoke(false)
+                            if (showPreviewPopup && variants.size > 1) {
+                                val dx = change.position.x - down.position.x
+                                val idxOffset = if (alignPopupEnd) {
+                                    ((-dx) / variantStepPx).roundToInt()
+                                } else {
+                                    (dx / variantStepPx).roundToInt()
+                                }
+                                selectedVariantIdx = idxOffset.coerceIn(0, variants.lastIndex)
+                            } else if (!showPreviewPopup) {
+                                val dist = hypot(
+                                    change.position.x - down.position.x,
+                                    change.position.y - down.position.y
+                                )
+                                if (dist > dragAwayThresholdPx) {
+                                    draggedAway = true
+                                    isPressed = false
+                                    job?.cancel()
                                 }
                             }
                         }
@@ -1217,46 +1277,101 @@ fun KeyView(
                 .fillMaxSize()
                 .shadow(1.dp, shape)
                 .background(bg, shape)
-                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .padding(horizontal = 1.dp, vertical = 1.dp)
         ) {
-            if (keyAction.secondaryLabel != null) {
+            displaySecondary?.takeIf { !hideSecondaryHint }?.let { secText ->
                 Text(
-                    text = keyAction.secondaryLabel,
-                    color = colors.textSecondary.copy(alpha = 0.8f),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Normal,
+                    text = secText,
+                    color = colors.textSecondary.copy(alpha = 0.85f),
+                    fontSize = if (isCompactRow) 10.5.sp else 11.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
                     modifier = Modifier.align(Alignment.TopEnd).padding(end = 3.dp, top = 1.dp)
                 )
             }
 
+            val mainFontSize = when {
+                keyAction.label.length > 3 -> 13.5.sp
+                keyAction.label.length > 2 -> 14.5.sp
+                keyAction.label.length == 2 && !displayPrimary.contains('\u25CC') -> 18.sp
+                isCompactRow && hasSecondary -> 22.sp
+                isCompactRow -> 24.sp
+                hasSecondary -> 24.sp
+                else -> 26.sp
+            }
+
             Text(
-                text = keyAction.label,
+                text = displayPrimary,
                 color = fg,
-                fontSize = if (keyAction.label.length > 2) 11.sp else if (keyAction.secondaryLabel != null) 16.sp else 18.sp,
+                fontSize = mainFontSize,
                 fontWeight = if (isEnterKey || isHighlight) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(top = if (keyAction.secondaryLabel != null) 3.dp else 0.dp)
+                    .padding(top = if (hasSecondary) 5.dp else 0.dp)
             )
         }
 
-        if (showPreviewPopup && keyAction.secondaryLabel != null) {
-            Box(
-                modifier = Modifier
-                    .offset(y = (-48).dp)
-                    .zIndex(200f)
-                    .size(width = 46.dp, height = 50.dp)
-                    .shadow(10.dp, RoundedCornerShape(10.dp))
-                    .background(colors.keySpecialBackground, RoundedCornerShape(10.dp))
-                    .border(1.5.dp, colors.accent, RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = keyAction.secondaryLabel,
-                    color = colors.textPrimary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+        if (showPreviewPopup && variants.isNotEmpty()) {
+            if (variants.size == 1) {
+                Box(
+                    modifier = Modifier
+                        .offset(y = (-58).dp)
+                        .zIndex(200f)
+                        .size(width = 52.dp, height = 56.dp)
+                        .shadow(10.dp, RoundedCornerShape(10.dp))
+                        .background(colors.keySpecialBackground, RoundedCornerShape(10.dp))
+                        .border(1.5.dp, colors.accent, RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = formatBengaliSignForDisplay(variants.first()),
+                        color = colors.textPrimary,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                val orderedEntries = if (alignPopupEnd) {
+                    variants.mapIndexed { index, value -> index to value }.reversed()
+                } else {
+                    variants.mapIndexed { index, value -> index to value }
+                }
+                Row(
+                    modifier = Modifier
+                        .align(if (alignPopupEnd) Alignment.TopEnd else Alignment.TopStart)
+                        .wrapContentWidth(
+                            align = if (alignPopupEnd) Alignment.End else Alignment.Start,
+                            unbounded = true
+                        )
+                        .offset(y = (-56).dp)
+                        .zIndex(200f)
+                        .shadow(12.dp, RoundedCornerShape(12.dp))
+                        .background(colors.keySpecialBackground, RoundedCornerShape(12.dp))
+                        .border(1.5.dp, colors.accent, RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    orderedEntries.forEach { (origIdx, rawVariant) ->
+                        val isSelected = origIdx == selectedVariantIdx
+                        Box(
+                            modifier = Modifier
+                                .size(width = 38.dp, height = 44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) colors.accent else Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = formatBengaliSignForDisplay(rawVariant),
+                                color = if (isSelected) colors.enterKeyText else colors.textPrimary,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
             }
         }
     }

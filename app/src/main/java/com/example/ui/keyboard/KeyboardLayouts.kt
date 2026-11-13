@@ -87,17 +87,82 @@ object KeyboardLayouts {
         )
     }
 
-    private fun getBengaliProbhatRows(isShifted: Boolean) = buildPairedLayout(
+    private val bengaliExtraVariants: Map<String, List<String>> = mapOf(
+        "র" to listOf("ড়", "\u09CD\u09B0", "\u09B0\u09CD", "ৃ", "ঋ"),
+        "ড়" to listOf("র", "\u09CD\u09B0", "\u09B0\u09CD", "ঢ়"),
+        "য়" to listOf("য", "\u09CD\u09AF", "\u09CD\u09AF\u09BE"),
+        "য" to listOf("য়", "\u09CD\u09AF", "\u09CD\u09AF\u09BE"),
+        "া" to listOf("অ", "আ", "\u09CD\u09AF\u09BE"),
+        "আ" to listOf("ঋ", "ৃ", "\u0985\u09CD\u09AF\u09BE"),
+        "ত" to listOf("থ", "ৎ", "\u09A4\u09CD\u09B0", "\u09A4\u09CD\u09AC"),
+        "জ" to listOf("ঝ", "ঞ", "\u099C\u09CD\u099E"),
+        "চ" to listOf("ছ", "ঞ", "\u099A\u09CD\u099B"),
+        "ন" to listOf("ণ", "ঞ", "\u09CD\u09A8", "\u09A8\u09CD\u09A4", "\u09A8\u09CD\u09A6"),
+        "ক" to listOf("খ", "\u0995\u09CD\u09B7", "\u0995\u09CD\u09B0", "\u0995\u09CD\u09A4"),
+        "ব" to listOf("ভ", "\u09CD\u09AC"),
+        "ম" to listOf("ঙ", "\u09CD\u09AE"),
+        "ল" to listOf("ং", "\u09CD\u09B2", "ৎ"),
+        "শ" to listOf("ঢ়", "\u09B6\u09CD\u09B0", "\u09B6\u09CD\u09AC"),
+        "স" to listOf("ষ", "\u09B8\u09CD\u09A4", "\u09B8\u09CD\u09AC", "\u09B8\u09CD\u09B0"),
+        "হ" to listOf("ঃ", "\u09B9\u09CD\u09AE", "\u09B9\u09CD\u09AF", "\u09B9\u09CD\u09B0"),
+        "ে" to listOf("ৈ", "এ", "ঐ"),
+        "ো" to listOf("ৌ", "ও", "ঔ"),
+        "ু" to listOf("উ", "ূ", "ৃ"),
+        "ূ" to listOf("ঊ", "ু", "ৃ"),
+        "ি" to listOf("ই", "ী"),
+        "ী" to listOf("ঈ", "ি"),
+        "ৃ" to listOf("\u09CD\u09B0", "\u09CD\u09AF", "\u09B0\u09CD", "ঋ", "ঞ", "ৎ", ","),
+        "\u09CD\u09B0" to listOf("ৃ", "\u09CD\u09AF", "\u09B0\u09CD", "ঋ", "ঞ", "ৎ"),
+        "্" to listOf("ঁ", "\u09CD\u09B0", "\u09CD\u09AF", "\u09B0\u09CD", "\u09CD\u09AC", "\u09CD\u09AE", "\u09CD\u09A8", "\u09CD\u09B2"),
+        "ফ" to listOf("প", "ঞ", "\u09AB\u09CD\u09B0"),
+        "ৈ" to listOf("ৌ", "ঐ", "ঔ"),
+        "ং" to listOf("ৎ", "ঃ", "ঁ")
+    )
+
+    private fun buildBengaliPairedLayout(
+        r1: List<Pair<String, String>>,
+        r2: List<Pair<String, String>>,
+        r3: List<Pair<String, String>>,
+        isShifted: Boolean,
+        shiftWeight: Float = 1.25f
+    ): List<List<KeyAction>> {
+        fun mapPair(p: Pair<String, String>): KeyAction {
+            val primary = if (isShifted) p.second else p.first
+            val secondary = if (isShifted) p.first else p.second
+            val variants = buildList {
+                add(secondary)
+                bengaliExtraVariants[primary]?.forEach { if (!contains(it)) add(it) }
+            }
+            return KeyAction(
+                label = primary,
+                secondaryLabel = secondary,
+                type = KeyType.CHARACTER,
+                extraVariants = if (variants.size > 1) variants else emptyList()
+            )
+        }
+
+        return listOf(
+            r1.map(::mapPair),
+            r2.map(::mapPair),
+            buildList {
+                add(KeyAction("⇧", null, KeyType.SHIFT, weight = shiftWeight))
+                addAll(r3.map(::mapPair))
+                add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = shiftWeight))
+            }
+        )
+    }
+
+    private fun getBengaliProbhatRows(isShifted: Boolean) = buildBengaliPairedLayout(
         r1 = listOf("দ" to "ধ", "ূ" to "ঊ", "ী" to "ঈ", "র" to "ড়", "ট" to "ঠ", "এ" to "ঐ", "ু" to "উ", "ি" to "ই", "ও" to "ঔ", "প" to "ফ", "ে" to "ৈ", "ো" to "ৌ"),
         r2 = listOf("া" to "অ", "স" to "ষ", "ড" to "ঢ", "ত" to "থ", "গ" to "ঘ", "হ" to "ঃ", "জ" to "ঝ", "ক" to "খ", "ল" to "ং"),
-        r3 = listOf("য়" to "য", "শ" to "ঢ়", "চ" to "ছ", "আ" to "ঋ", "ব" to "ভ", "ন" to "ণ", "ম" to "ঙ", "," to "<", "্" to "ঁ"),
+        r3 = listOf("য়" to "য", "শ" to "ঢ়", "চ" to "ছ", "আ" to "ঋ", "ব" to "ভ", "ন" to "ণ", "ম" to "ঙ", "ৃ" to "\u09CD\u09B0", "্" to "ঁ"),
         isShifted = isShifted
     )
 
     private fun getAssameseRows(isShifted: Boolean) = buildPairedLayout(
         r1 = listOf("দ" to "ধ", "ূ" to "ঊ", "ী" to "ঈ", "ৰ" to "ড়", "ট" to "ঠ", "এ" to "ঐ", "ু" to "উ", "ি" to "ই", "ও" to "ঔ", "প" to "ফ", "ে" to "ৈ", "ো" to "ৌ"),
         r2 = listOf("া" to "অ", "স" to "ষ", "ড" to "ঢ", "ত" to "থ", "গ" to "ঘ", "হ" to "ঃ", "জ" to "ঝ", "ক" to "খ", "ল" to "ং"),
-        r3 = listOf("য়" to "য", "শ" to "ঢ়", "চ" to "ছ", "আ" to "ঋ", "ব" to "ৱ", "ন" to "ণ", "ম" to "ঙ", "," to "<", "্" to "ঁ"),
+        r3 = listOf("য়" to "য", "শ" to "ঢ়", "চ" to "ছ", "আ" to "ঋ", "ব" to "ৱ", "ন" to "ণ", "ম" to "ঙ", "ৃ" to "\u09CD\u09B0", "্" to "ঁ"),
         isShifted = isShifted
     )
 
@@ -109,12 +174,12 @@ object KeyboardLayouts {
         isShifted = isShifted
     )
 
-    private fun getBengaliNationalRows(isShifted: Boolean) = buildPairedLayout(
-        r1 = listOf("ড়" to "ঢ়", "ই" to "ঈ", "উ" to "ঊ", "র" to "ঋ", "ত" to "ঐ", "য" to "ঔ", "ব" to "ভ", "হ" to "ঙ", "গ" to "ঘ", "দ" to "ধ"),
-        r2 = listOf("া" to "অ", "ি" to "আ", "ে" to "ৈ", "ো" to "ৌ", "ু" to "ী", "প" to "ূ", "ক" to "খ", "জ" to "ঝ", "ট" to "ঠ", "চ" to "ছ"),
-        r3 = listOf("ং" to "ৎ", "্" to "ঃ", "ম" to "ঁ", "ন" to "ণ", "স" to "ষ", "ল" to "শ", "।" to "ফ"),
+    private fun getBengaliNationalRows(isShifted: Boolean) = buildBengaliPairedLayout(
+        r1 = listOf("ড়" to "ঢ়", "ই" to "ঈ", "উ" to "ঊ", "র" to "ঋ", "ত" to "থ", "য" to "য়", "ব" to "ভ", "হ" to "ঙ", "গ" to "ঘ", "দ" to "ধ", "ড" to "ঢ"),
+        r2 = listOf("া" to "অ", "ি" to "আ", "ে" to "এ", "ো" to "ও", "ু" to "ী", "প" to "ূ", "ক" to "খ", "জ" to "ঝ", "ট" to "ঠ", "চ" to "ছ"),
+        r3 = listOf("ং" to "ৎ", "্" to "ঃ", "ম" to "ঁ", "ন" to "ণ", "স" to "ষ", "ল" to "শ", "ফ" to "ঞ", "ৃ" to "\u09CD\u09B0", "ৈ" to "ৌ"),
         isShifted = isShifted,
-        shiftWeight = 1.3f
+        shiftWeight = 1.25f
     )
 
     private fun getLatinQwertyRows(
@@ -296,19 +361,49 @@ object KeyboardLayouts {
     )
 
     fun getSymbols1(language: LanguageId): List<List<KeyAction>> {
-        val topRow = when (language) {
-            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.SYLHETI, LanguageId.ASSAMESE ->
-                listOf("১" to "1", "২" to "2", "৩" to "3", "৪" to "4", "৫" to "5", "৬" to "6", "৭" to "7", "৮" to "8", "৯" to "9", "০" to "0")
-                    .map { (bn, en) -> KeyAction(bn, en, KeyType.CHARACTER) }
-            else ->
-                listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0").map { KeyAction(it, null, KeyType.CHARACTER) }
+        val isBengaliFamily = language in listOf(
+            LanguageId.BANGLA_PROBHAT, LanguageId.BANGLA_PHONETIC, LanguageId.BANGLA_NATIONAL, LanguageId.SYLHETI, LanguageId.ASSAMESE
+        )
+        val topRow = if (isBengaliFamily) {
+            listOf("১" to "1", "২" to "2", "৩" to "3", "৪" to "4", "৫" to "5", "৬" to "6", "৭" to "7", "৮" to "8", "৯" to "9", "০" to "0")
+                .map { (bn, en) -> KeyAction(bn, en, KeyType.CHARACTER) }
+        } else {
+            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0").map { KeyAction(it, null, KeyType.CHARACTER) }
+        }
+        val row2 = if (isBengaliFamily) {
+            listOf(
+                KeyAction("@", null, KeyType.CHARACTER),
+                KeyAction("#", null, KeyType.CHARACTER),
+                KeyAction("৳", "₹", KeyType.CHARACTER, extraVariants = listOf("₹", "$", "€", "£")),
+                KeyAction("%", null, KeyType.CHARACTER),
+                KeyAction("&", null, KeyType.CHARACTER),
+                KeyAction("-", "—", KeyType.CHARACTER, extraVariants = listOf("—", "–", "_")),
+                KeyAction("+", null, KeyType.CHARACTER),
+                KeyAction("(", "[", KeyType.CHARACTER),
+                KeyAction(")", "]", KeyType.CHARACTER),
+                KeyAction("/", "\\", KeyType.CHARACTER)
+            )
+        } else {
+            listOf("@", "#", "৳", "%", "&", "-", "+", "(", ")", "/").map { KeyAction(it, null, KeyType.CHARACTER) }
         }
         return listOf(
             topRow,
-            listOf("@", "#", "৳", "%", "&", "-", "+", "(", ")", "/").map { KeyAction(it, null, KeyType.CHARACTER) },
+            row2,
             buildList {
                 add(KeyAction("1/2", null, KeyType.MODE_SWITCH, weight = 1.3f))
-                addAll(listOf("*", "\"", "'", ":", ";", "!", "?").map { KeyAction(it, null, KeyType.CHARACTER) })
+                if (isBengaliFamily) {
+                    addAll(listOf(
+                        KeyAction("*", null, KeyType.CHARACTER),
+                        KeyAction("\"", "“", KeyType.CHARACTER, extraVariants = listOf("“", "”")),
+                        KeyAction("'", "‘", KeyType.CHARACTER, extraVariants = listOf("‘", "’")),
+                        KeyAction(":", "ঃ", KeyType.CHARACTER),
+                        KeyAction(";", null, KeyType.CHARACTER),
+                        KeyAction("!", "॥", KeyType.CHARACTER, extraVariants = listOf("॥", "।")),
+                        KeyAction("?", null, KeyType.CHARACTER)
+                    ))
+                } else {
+                    addAll(listOf("*", "\"", "'", ":", ";", "!", "?").map { KeyAction(it, null, KeyType.CHARACTER) })
+                }
                 add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.3f))
             }
         )

@@ -249,8 +249,8 @@ fun SpacebarComponent(
                     ) { targetLang ->
                         Text(
                             text = if (canSwipe && isPressed) "◀  ${targetLang.spacebarLabel}  ▶" else targetLang.spacebarLabel,
-                            color = textColor.copy(alpha = 0.72f),
-                            fontSize = 13.sp,
+                            color = textColor.copy(alpha = 0.78f),
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
