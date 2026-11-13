@@ -360,13 +360,33 @@ class TypeGeniusIME : InputMethodService(),
 
     private fun playKeyClickSound(keyType: KeyType) {
         if (!soundEnabled) return
-        val effect = when (keyType) {
-            KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
-            KeyType.BACKSPACE -> AudioManager.FX_KEYPRESS_DELETE
-            KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
-            else -> AudioManager.FX_KEYPRESS_STANDARD
+        val am = audioManager ?: return
+        val vol = soundProfile.volume
+        val effect = when (soundProfile) {
+            SoundProfile.TYPEWRITER -> when (keyType) {
+                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
+                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
+                KeyType.BACKSPACE -> AudioManager.FX_KEYPRESS_DELETE
+                else -> AudioManager.FX_KEYPRESS_STANDARD
+            }
+            SoundProfile.MECHANICAL -> when (keyType) {
+                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
+                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
+                else -> AudioManager.FX_KEYPRESS_DELETE
+            }
+            SoundProfile.THOCK -> when (keyType) {
+                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
+                else -> AudioManager.FX_KEYPRESS_STANDARD
+            }
+            SoundProfile.POPPY -> AudioManager.FX_KEY_CLICK
+            SoundProfile.SYSTEM -> when (keyType) {
+                KeyType.SPACEBAR -> AudioManager.FX_KEYPRESS_SPACEBAR
+                KeyType.BACKSPACE -> AudioManager.FX_KEYPRESS_DELETE
+                KeyType.ENTER -> AudioManager.FX_KEYPRESS_RETURN
+                else -> AudioManager.FX_KEYPRESS_STANDARD
+            }
         }
-        audioManager?.playSoundEffect(effect, soundProfile.volume)
+        am.playSoundEffect(effect, vol)
     }
 
     private fun handleKeyAction(action: KeyAction) {
@@ -959,9 +979,16 @@ class TypeGeniusIME : InputMethodService(),
             return
         }
         val ic = currentInputConnection ?: return
+        if (com.example.data.dictionary.EmojiPredictionEngine.isEmojiSuggestion(candidate)) {
+            ic.commitText("$candidate ", 1)
+            suggestions = dictionaryManager.getDefaultSuggestions(activeLanguage)
+            return
+        }
         val styledCandidate = if (activeFancyStyle != FancyFontStyle.NORMAL) {
             UnicodeTextStyler.styleText(commitValue, activeFancyStyle)
-        } else commitValue
+        } else {
+            commitValue
+        }
 
         if (grammarFix != null && composingBuffer.isEmpty()) {
             ic.deleteSurroundingText(grammarFix.replaceCharLength, 0)
@@ -1339,12 +1366,16 @@ class TypeGeniusIME : InputMethodService(),
                     languageId = activeLanguage,
                     spellCheckEnabled = spellCheckEnabled
                 )
+                val predictedEmojis = if (lastWord.isNotEmpty()) {
+                    com.example.data.dictionary.EmojiPredictionEngine.predictEmojis(UnicodeTextStyler.unstyleToPlain(lastWord)).take(2)
+                } else emptyList()
                 suggestions = buildList {
                     math?.let {
                         add(it.resultString)
                         add(it.equationString)
                     }
                     addAll(grammarFixes.map { it.displayLabel })
+                    addAll(predictedEmojis)
                     addAll(shortcutMatches)
                     addAll(dictPreds)
                 }.distinct().take(6)

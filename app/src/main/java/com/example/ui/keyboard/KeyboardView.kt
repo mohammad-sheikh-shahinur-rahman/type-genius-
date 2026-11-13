@@ -700,6 +700,18 @@ fun KeyboardView(
                     )
                 }
 
+                KeyboardViewMode.STICKERS_KAOMOJI -> {
+                    StickersAndKaomojiPanel(
+                        colors = colors,
+                        onInsertText = { text ->
+                            onInsertTextSnippet(text)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
+                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onHaptic = { haptic() }
+                    )
+                }
+
                 KeyboardViewMode.MORE_TOOLS -> {
                     MoreToolsPanel(
                         colors = colors,
@@ -1322,6 +1334,7 @@ private fun toolIconForGhost(tool: KeyboardToolId) = when (tool) {
     KeyboardToolId.TEXT_EDITING -> Icons.AutoMirrored.Filled.FormatIndentIncrease
     KeyboardToolId.GEMINI_AI -> Icons.Default.AutoAwesome
     KeyboardToolId.EMOJI -> Icons.Default.Mood
+    KeyboardToolId.STICKERS -> Icons.Default.Mood
     KeyboardToolId.GIF -> Icons.Default.Gif
     KeyboardToolId.CLIPBOARD -> Icons.Default.ContentPaste
     KeyboardToolId.TRANSLATOR -> Icons.Default.Translate

@@ -16,7 +16,8 @@ enum class TypeGeniusAiAction(val label: String, val resultLabel: String) {
     FORMAL("Formal", "More formal"),
     CASUAL("Casual", "More casual"),
     NATIVE("Native", "In native script"),
-    ENGLISH("English", "In English")
+    ENGLISH("English", "In English"),
+    CUSTOM("Custom", "Custom prompt")
 }
 
 enum class CorrectionCategory {
@@ -118,7 +119,8 @@ object TypeGeniusAiEngine {
         action: TypeGeniusAiAction,
         activeLanguage: LanguageId,
         apiKey: String,
-        avoidPrevious: List<String> = emptyList()
+        avoidPrevious: List<String> = emptyList(),
+        customPrompt: String = ""
     ): TypeGeniusAiResult {
         val clean = text.trim()
         if (clean.isEmpty()) {
@@ -133,16 +135,16 @@ object TypeGeniusAiEngine {
         if (apiKey.isNotBlank()) {
             val remote = when (action) {
                 TypeGeniusAiAction.CHECK -> runGeminiCheck(clean, activeLanguage, apiKey)
-                else -> runGeminiRewrite(clean, action, activeLanguage, apiKey, avoidPrevious)
+                else -> runGeminiRewrite(clean, action, activeLanguage, apiKey, avoidPrevious, customPrompt)
             }
             if (remote.isSuccess) {
                 return remote.getOrThrow()
             }
             val errMsg = remote.exceptionOrNull()?.message ?: "Gemini unavailable"
-            return runLocalFallback(clean, action, activeLanguage, "Offline fallback ($errMsg)")
+            return runLocalFallback(clean, action, activeLanguage, "Offline fallback ($errMsg)", customPrompt)
         }
 
-        return runLocalFallback(clean, action, activeLanguage, "On-Device Engine (Add Gemini API key in Settings for cloud AI)")
+        return runLocalFallback(clean, action, activeLanguage, "On-Device Engine (Add Gemini API key in Settings for cloud AI)", customPrompt)
     }
 
     private suspend fun runGeminiCheck(
@@ -191,7 +193,8 @@ object TypeGeniusAiEngine {
         action: TypeGeniusAiAction,
         languageId: LanguageId,
         apiKey: String,
-        avoid: List<String>
+        avoid: List<String>,
+        customPrompt: String
     ): Result<TypeGeniusAiResult> {
         val targetName = when {
             languageId.code.startsWith("bn") || languageId == LanguageId.SYLHETI -> "Bangla"
@@ -216,6 +219,7 @@ object TypeGeniusAiEngine {
             TypeGeniusAiAction.CASUAL -> "Rewrite in a friendly, relaxed everyday chat tone. $NATURAL_RULES"
             TypeGeniusAiAction.NATIVE -> "If romanized ($targetName typed in English letters like Banglish/Hinglish), convert to correct, natural $targetName script with proper spelling and punctuation (Bangla short forms like tmr=তোমার, k=কে, vai=ভাই). $NATURAL_RULES"
             TypeGeniusAiAction.ENGLISH -> "Understand the message (including Banglish/Hinglish/short forms like tmr=your) and express it as fluent, natural English keeping the writer's meaning and tone."
+            TypeGeniusAiAction.CUSTOM -> if (customPrompt.isNotBlank()) "$customPrompt. $NATURAL_RULES" else "Rewrite this text to be expressive, clean and natural. $NATURAL_RULES"
             TypeGeniusAiAction.CHECK -> ""
         }
 
@@ -298,7 +302,8 @@ object TypeGeniusAiEngine {
         text: String,
         action: TypeGeniusAiAction,
         languageId: LanguageId,
-        note: String
+        note: String,
+        customPrompt: String = ""
     ): TypeGeniusAiResult {
         return when (action) {
             TypeGeniusAiAction.CHECK -> {
@@ -386,6 +391,30 @@ object TypeGeniusAiEngine {
                     usedGeminiApi = false,
                     statusNote = note
                 )
+            }
+            TypeGeniusAiAction.CUSTOM -> {
+                val p = customPrompt.lowercase()
+                val res = when {
+                    p.contains("ইংরেজি") || p.contains("english") || p.contains("translate") -> {
+                        val src = if (text.any { it.code in 0x0980..0x09FF }) "bn" else "banglish"
+                        OfflineTranslator.translate(text, src, "en").translatedText.ifBlank { text }
+                    }
+                    p.contains("short") || p.contains("সংক্ষেপ") -> {
+                        val fillers = setOf("basically", "actually", "literally", "really", "just", "very", "quite")
+                        text.split(Regex("\\s+")).filterNot { it.lowercase() in fillers }.joinToString(" ").ifBlank { text }
+                    }
+                    p.contains("sweet") || p.contains("মিষ্টি") || p.contains("polite") || p.contains("নম্র") -> {
+                        "প্রিয়, $text 😊"
+                    }
+                    p.contains("formal") || p.contains("অফিসিয়াল") || p.contains("দরখাস্ত") -> {
+                        "সম্মানিত মহোদয়,\n$text\nবিনীত নিবেদক।"
+                    }
+                    p.contains("caption") || p.contains("ক্যাপশন") || p.contains("viral") -> {
+                        "✨ $text ✨ #TypeGenius"
+                    }
+                    else -> applyCorrections(text, collectLocalCorrections(text, languageId)).ifBlank { text }
+                }
+                TypeGeniusAiResult(action, text, res, usedGeminiApi = false, statusNote = "$note • Custom")
             }
         }
     }

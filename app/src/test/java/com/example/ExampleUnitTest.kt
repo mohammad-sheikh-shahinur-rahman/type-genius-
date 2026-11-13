@@ -3,6 +3,7 @@ package com.example
 import com.example.data.KeyboardFontPreset
 import com.example.data.ai.TypeGeniusAiAction
 import com.example.data.ai.TypeGeniusAiEngine
+import com.example.data.dictionary.EmojiPredictionEngine
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.OfflineGlideEngine
 import com.example.data.dictionary.OfflineGrammarEngine
@@ -14,9 +15,11 @@ import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardTheme
 import com.example.model.KeyboardToolId
 import com.example.model.LanguageId
+import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
 import com.example.ui.keyboard.KeyboardLayouts
 import com.example.ui.keyboard.KeyboardThemeData
+import com.example.ui.keyboard.StickerRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -522,5 +525,52 @@ class ExampleUnitTest {
         val shiftedRow3 = KeyboardLayouts.getAlphabetRows(LanguageId.ENGLISH, isShifted = true)[2]
         assertEquals("Copy", shiftedRow3.firstOrNull { it.label == "C" }?.secondaryLabel)
         assertEquals("Paste", shiftedRow3.firstOrNull { it.label == "V" }?.secondaryLabel)
+    }
+
+    @Test
+    fun testContextualEmojiPrediction_andStickerKaomojiRepository() {
+        val loveEmojis = EmojiPredictionEngine.predictEmojis("love")
+        assertTrue(loveEmojis.contains("❤️"))
+        assertTrue(EmojiPredictionEngine.predictEmojis("ভালোবাসা").contains("❤️"))
+        assertTrue(EmojiPredictionEngine.predictEmojis("cha").contains("☕"))
+        assertTrue(EmojiPredictionEngine.predictEmojis("ধন্যবাদ").contains("🙏"))
+
+        assertTrue(EmojiPredictionEngine.isEmojiSuggestion("❤️"))
+        assertFalse(EmojiPredictionEngine.isEmojiSuggestion("আমি"))
+        assertFalse(EmojiPredictionEngine.isEmojiSuggestion("안녕"))
+        assertFalse(EmojiPredictionEngine.isEmojiSuggestion("hello"))
+
+        assertTrue(StickerRepository.banglaStickers.isNotEmpty())
+        assertTrue(StickerRepository.kaomojis.isNotEmpty())
+        assertTrue(KeyboardToolId.DEFAULT_TOOLBAR.contains(KeyboardToolId.STICKERS))
+        assertEquals(KeyboardToolId.STICKERS, KeyboardToolId.fromId("stickers"))
+    }
+
+    @Test
+    fun testSoundProfiles_andCustomAiPromptFallback() = runBlocking {
+        assertEquals(5, SoundProfile.entries.size)
+        assertEquals(SoundProfile.MECHANICAL, SoundProfile.fromId("mechanical"))
+        assertEquals(SoundProfile.TYPEWRITER, SoundProfile.fromId("typewriter"))
+        assertEquals(SoundProfile.THOCK, SoundProfile.fromId("thock"))
+        assertEquals(SoundProfile.POPPY, SoundProfile.fromId("poppy"))
+        assertEquals(SoundProfile.SYSTEM, SoundProfile.fromId("invalid"))
+
+        val formalCustom = TypeGeniusAiEngine.runAction(
+            text = "আমি কাল ছুটিতে থাকবো",
+            action = TypeGeniusAiAction.CUSTOM,
+            activeLanguage = LanguageId.BANGLA_PROBHAT,
+            apiKey = "",
+            customPrompt = "ফরমাল ও মার্জিত অফিসিয়াল ভাষায় সাজিয়ে লেখো"
+        )
+        assertTrue(formalCustom.rewrittenText.contains("সম্মানিত মহোদয়"))
+
+        val engCustom = TypeGeniusAiEngine.runAction(
+            text = "ami tomake valobashi",
+            action = TypeGeniusAiAction.CUSTOM,
+            activeLanguage = LanguageId.BANGLA_PHONETIC,
+            apiKey = "",
+            customPrompt = "ফ্লুয়েন্ট ন্যাচারাল ইংরেজিতে প্রকাশ করো"
+        )
+        assertEquals("i love you", engCustom.rewrittenText.lowercase())
     }
 }

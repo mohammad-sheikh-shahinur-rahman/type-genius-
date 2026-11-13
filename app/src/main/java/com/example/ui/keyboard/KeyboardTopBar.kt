@@ -269,6 +269,7 @@ fun KeyboardTopBar(
                         KeyboardToolId.TEXT_EDITING -> viewMode == KeyboardViewMode.TEXT_EDITOR
                         KeyboardToolId.GEMINI_AI -> viewMode == KeyboardViewMode.GEMINI_AI
                         KeyboardToolId.EMOJI -> viewMode == KeyboardViewMode.EMOJI
+                        KeyboardToolId.STICKERS -> viewMode == KeyboardViewMode.STICKERS_KAOMOJI
                         KeyboardToolId.CLIPBOARD -> viewMode == KeyboardViewMode.CLIPBOARD
                         KeyboardToolId.TRANSLATOR -> isTranslatorOpen || viewMode == KeyboardViewMode.TRANSLATOR
                         KeyboardToolId.FANCY_FONTS -> viewMode == KeyboardViewMode.FANCY_FONTS || activeFancyStyle != FancyFontStyle.NORMAL
@@ -334,6 +335,9 @@ fun KeyboardTopBar(
                                     )
                                     KeyboardToolId.EMOJI -> onSelectViewMode(
                                         if (viewMode == KeyboardViewMode.EMOJI) KeyboardViewMode.LETTERS else KeyboardViewMode.EMOJI
+                                    )
+                                    KeyboardToolId.STICKERS -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.STICKERS_KAOMOJI) KeyboardViewMode.LETTERS else KeyboardViewMode.STICKERS_KAOMOJI
                                     )
                                     KeyboardToolId.GIF -> onSelectViewMode(KeyboardViewMode.EMOJI)
                                     KeyboardToolId.CLIPBOARD -> onSelectViewMode(
@@ -609,6 +613,12 @@ private fun TopBarToolContent(
             }
         }
         KeyboardToolId.EMOJI -> Icon(
+            imageVector = Icons.Default.Mood,
+            contentDescription = tool.label,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
+        KeyboardToolId.STICKERS -> Icon(
             imageVector = Icons.Default.Mood,
             contentDescription = tool.label,
             tint = tint,

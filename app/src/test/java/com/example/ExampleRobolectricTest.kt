@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.dictionary.DictionaryManager
 import com.example.data.local.TextShortcutRepository
 import com.example.data.local.TypeGeniusDatabase
 import com.example.data.translator.OfflineTranslator
@@ -83,5 +84,27 @@ class ExampleRobolectricTest {
         if (added != null) {
             repo.deleteShortcut(added)
         }
+    }
+
+    @Test
+    fun `personal dictionary custom word add, remove, and clear offline`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dict = DictionaryManager(context)
+
+        dict.addCustomWord("SylhetTech", "en")
+        dict.addCustomWord("টাইপজিনিয়াস", "bn_probhat")
+
+        val initialWords = dict.learnedWordsFlow.first()
+        assertTrue(initialWords.any { it.word == "SylhetTech" })
+        assertTrue(initialWords.any { it.word == "টাইপজিনিয়াস" })
+
+        dict.removeLearnedWord("SylhetTech")
+        val afterRemove = dict.learnedWordsFlow.first()
+        assertTrue(afterRemove.none { it.word == "SylhetTech" })
+        assertTrue(afterRemove.any { it.word == "টাইপজিনিয়াস" })
+
+        dict.clearAllLearnedWords()
+        val afterClear = dict.learnedWordsFlow.first()
+        assertTrue(afterClear.isEmpty())
     }
 }

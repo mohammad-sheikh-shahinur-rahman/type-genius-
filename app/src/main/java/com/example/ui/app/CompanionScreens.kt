@@ -1,5 +1,7 @@
 package com.example.ui.app
 
+import android.content.Context
+import android.media.AudioManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -999,8 +1001,22 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                                 SoundProfile.entries.forEach { profile ->
                                     FilterChip(
                                         selected = soundProfile == profile,
-                                        onClick = { scope.launch { settingsManager.setSoundProfile(profile) } },
-                                        label = { Text(profile.label, fontSize = 12.sp, maxLines = 1) }
+                                        onClick = {
+                                            scope.launch { settingsManager.setSoundProfile(profile) }
+                                            runCatching {
+                                                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                                val fx = when (profile) {
+                                                    SoundProfile.MECHANICAL -> AudioManager.FX_KEYPRESS_DELETE
+                                                    SoundProfile.TYPEWRITER -> AudioManager.FX_KEYPRESS_RETURN
+                                                    SoundProfile.THOCK -> AudioManager.FX_KEYPRESS_SPACEBAR
+                                                    SoundProfile.POPPY -> AudioManager.FX_KEY_CLICK
+                                                    SoundProfile.SYSTEM -> AudioManager.FX_KEYPRESS_STANDARD
+                                                }
+                                                am?.playSoundEffect(fx, profile.volume)
+                                            }
+                                        },
+                                        label = { Text(profile.label, fontSize = 12.sp, maxLines = 1) },
+                                        modifier = Modifier.testTag("sound_profile_${profile.id}")
                                     )
                                 }
                             }
@@ -1070,22 +1086,33 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                     OutlinedTextField(
                         value = apiKeyInput,
                         onValueChange = { apiKeyInput = it },
-                        placeholder = { Text("AIzaSy...") },
+                        placeholder = { Text("AIzaSy... or AQ.Ab8...") },
                         label = { Text("User Google Gemini API Key") },
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("gemini_api_key_input")
                     )
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
+                                val cleaned = apiKeyInput.trim()
+                                    .replace("\n", "")
+                                    .replace("\r", "")
+                                    .replace("\t", "")
+                                    .replace(" ", "")
+                                apiKeyInput = cleaned
                                 scope.launch {
-                                    settingsManager.setGeminiApiKey(apiKeyInput)
+                                    settingsManager.setGeminiApiKey(cleaned)
                                     Toast.makeText(context, "API Key saved locally", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
-                            modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
+                            modifier = Modifier
+                                .weight(1f)
+                                .defaultMinSize(minHeight = 48.dp)
+                                .testTag("save_gemini_key_button")
                         ) {
                             Text("Save Key")
                         }
@@ -1093,11 +1120,18 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                         if (apiKeyInput.isNotBlank()) {
                             OutlinedButton(
                                 onClick = {
+                                    val cleaned = apiKeyInput.trim()
+                                        .replace("\n", "")
+                                        .replace("\r", "")
+                                        .replace("\t", "")
+                                        .replace(" ", "")
+                                    apiKeyInput = cleaned
                                     testApiLoading = true
                                     testApiResult = null
                                     scope.launch {
+                                        settingsManager.setGeminiApiKey(cleaned)
                                         val res = GeminiDirectClient().executeDirectPrompt(
-                                            apiKey = apiKeyInput.trim(),
+                                            apiKey = cleaned,
                                             prompt = "Respond with 'Direct Connection Verified: TypeGenius AI Ready' in 7 words or less."
                                         )
                                         testApiLoading = false
@@ -1105,7 +1139,10 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                                             .onFailure { testApiResult = "ERROR: ${it.message}" }
                                     }
                                 },
-                                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 46.dp)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .testTag("test_gemini_key_button")
                             ) {
                                 if (testApiLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp))
                                 else Text("Test Connection")
@@ -1153,9 +1190,11 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ThemeCard()
                         PhotoBackgroundThemeCard(settingsManager = settingsManager)
+                        ToolbarCustomizerCard(settingsManager = settingsManager)
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TypingPreferencesCard()
+                        PersonalDictionaryCard()
                         PersonalShortcutsCard()
                         DirectGeminiCard()
                     }
@@ -1164,6 +1203,8 @@ fun GeneralSettingsScreen(settingsManager: SettingsManager) {
                 ThemeCard()
                 PhotoBackgroundThemeCard(settingsManager = settingsManager)
                 TypingPreferencesCard()
+                ToolbarCustomizerCard(settingsManager = settingsManager)
+                PersonalDictionaryCard()
                 PersonalShortcutsCard()
                 DirectGeminiCard()
             }

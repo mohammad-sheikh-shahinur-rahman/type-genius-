@@ -405,6 +405,13 @@ fun MoreToolsPanel(
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.GEMINI_AI) }
         ),
         ToolTile(
+            id = KeyboardToolId.STICKERS,
+            label = "Stickers",
+            icon = Icons.Default.Mood,
+            testTag = "tool_stickers",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.STICKERS_KAOMOJI) }
+        ),
+        ToolTile(
             id = KeyboardToolId.ONE_HANDED,
             label = if (oneHandedMode == OneHandedMode.FULL) "One-hand" else oneHandedMode.label,
             icon = Icons.Default.Smartphone,

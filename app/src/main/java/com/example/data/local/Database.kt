@@ -66,8 +66,14 @@ interface WordDao {
     @Query("UPDATE learned_words SET frequency = frequency + 1, lastUsed = :now WHERE word = :word AND language = :lang")
     suspend fun incrementFrequency(word: String, lang: String, now: Long = System.currentTimeMillis())
 
+    @Query("SELECT * FROM learned_words ORDER BY frequency DESC, lastUsed DESC LIMIT 200")
+    fun getAllLearnedWords(): Flow<List<LearnedWord>>
+
     @Query("DELETE FROM learned_words WHERE word = :word")
     suspend fun deleteWord(word: String)
+
+    @Query("DELETE FROM learned_words")
+    suspend fun clearAllLearnedWords()
 }
 
 @Dao

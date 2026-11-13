@@ -278,7 +278,14 @@ class SettingsManager(private val context: Context) {
     }
 
     suspend fun setGeminiApiKey(key: String) {
-        context.dataStore.edit { it[KEY_GEMINI_API_KEY] = key.trim() }
+        val clean = key.trim()
+            .replace("\n", "")
+            .replace("\r", "")
+            .replace("\t", "")
+            .replace(" ", "")
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+        context.dataStore.edit { it[KEY_GEMINI_API_KEY] = clean }
     }
 
     suspend fun setWallpaperPath(path: String) {

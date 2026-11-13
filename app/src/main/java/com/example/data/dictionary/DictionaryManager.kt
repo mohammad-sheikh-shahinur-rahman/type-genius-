@@ -240,4 +240,33 @@ class DictionaryManager(context: Context) {
             wordDao.incrementFrequency(word.trim(), languageId.code)
         } catch (_: Exception) {}
     }
+
+    val learnedWordsFlow: kotlinx.coroutines.flow.Flow<List<LearnedWord>> = wordDao.getAllLearnedWords()
+
+    suspend fun addCustomWord(word: String, languageCode: String) = withContext(Dispatchers.IO) {
+        val clean = word.trim()
+        if (clean.isBlank()) return@withContext
+        try {
+            wordDao.insertOrUpdate(
+                LearnedWord(
+                    word = clean,
+                    language = languageCode,
+                    frequency = 5,
+                    lastUsed = System.currentTimeMillis()
+                )
+            )
+        } catch (_: Exception) {}
+    }
+
+    suspend fun removeLearnedWord(word: String) = withContext(Dispatchers.IO) {
+        try {
+            wordDao.deleteWord(word.trim())
+        } catch (_: Exception) {}
+    }
+
+    suspend fun clearAllLearnedWords() = withContext(Dispatchers.IO) {
+        try {
+            wordDao.clearAllLearnedWords()
+        } catch (_: Exception) {}
+    }
 }

@@ -113,9 +113,11 @@ enum class VibrationStrength(val id: String, val label: String, val durationMs: 
 }
 
 enum class SoundProfile(val id: String, val label: String, val volume: Float) {
-    SYSTEM("system", "Standard Click", 0.50f),
-    SOFT("soft", "Soft Tap", 0.25f),
-    MECHANICAL("mechanical", "Mechanical Bold", 0.90f);
+    SYSTEM("system", "Default Android Click", 0.50f),
+    MECHANICAL("mechanical", "Mechanical Clicky (Blue Switch)", 0.95f),
+    TYPEWRITER("typewriter", "Vintage Typewriter", 0.85f),
+    THOCK("thock", "Creamy Thock", 0.70f),
+    POPPY("poppy", "Bubble Pop / iOS Crisp", 0.60f);
 
     companion object {
         fun fromId(id: String): SoundProfile = entries.find { it.id == id } ?: SYSTEM
@@ -128,6 +130,7 @@ enum class KeyboardViewMode {
     SYMBOLS_2,
     NUMPAD,
     EMOJI,
+    STICKERS_KAOMOJI,
     CLIPBOARD,
     TEXT_EDITOR,
     TRANSLATOR,
@@ -145,6 +148,7 @@ enum class KeyboardToolId(
     TEXT_EDITING("text_editing", "Text edit", "toolbox_text_editing"),
     GEMINI_AI("gemini_ai", "TypeGenius AI", "toolbox_gemini"),
     EMOJI("emoji", "Emoji", "toolbox_emoji"),
+    STICKERS("stickers", "Stickers", "toolbox_stickers"),
     CLIPBOARD("clipboard", "Clipboard", "toolbox_clipboard"),
     TRANSLATOR("translator", "Translate", "toolbox_translator"),
     FANCY_FONTS("fancy_fonts", "Fonts", "toolbox_fonts"),
@@ -163,6 +167,7 @@ enum class KeyboardToolId(
             TEXT_EDITING,
             GEMINI_AI,
             EMOJI,
+            STICKERS,
             CLIPBOARD,
             TRANSLATOR,
             FANCY_FONTS,

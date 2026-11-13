@@ -79,8 +79,16 @@ fun TypeGeniusAiPanel(
     var isLoading by remember { mutableStateOf(false) }
     val skippedIndices = remember { mutableStateListOf<Int>() }
     val previousVariations = remember { mutableStateListOf<String>() }
+    val quickPrompts = listOf(
+        "মিষ্টি করে লেখো" to "মিষ্টি ও আন্তরিক ভাষায় সুন্দর করে লেখো",
+        "অফিসিয়াল দরখাস্ত" to "ফরমাল ও মার্জিত অফিসিয়াল ভাষায় সাজিয়ে লেখো",
+        "সংক্ষেপ করো" to "সংক্ষেপে মূল ভাব ঠিক রেখে এক লাইনে লেখো",
+        "ইংরেজি অনুবাদ" to "ফ্লুয়েন্ট ন্যাচারাল ইংরেজিতে প্রকাশ করো",
+        "ভাইরাল ক্যাপশন" to "আকর্ষণীয় সোশ্যাল মিডিয়া ক্যাপশন ও ইমোজি দিয়ে সাজাও"
+    )
+    var customPromptText by remember { mutableStateOf(quickPrompts.first().second) }
 
-    fun execute(action: TypeGeniusAiAction, isVariation: Boolean = false) {
+    fun execute(action: TypeGeniusAiAction, isVariation: Boolean = false, prompt: String = "") {
         val latest = onRefreshSourceText().ifBlank { currentSource }
         currentSource = latest
         if (!isVariation) {
@@ -99,7 +107,8 @@ fun TypeGeniusAiPanel(
                 action = action,
                 activeLanguage = activeLanguage,
                 apiKey = geminiApiKey,
-                avoidPrevious = if (isVariation) previousVariations.toList() else emptyList()
+                avoidPrevious = if (isVariation) previousVariations.toList() else emptyList(),
+                customPrompt = if (action == TypeGeniusAiAction.CUSTOM) prompt.ifBlank { customPromptText } else ""
             )
             isLoading = false
         }
@@ -393,6 +402,33 @@ fun TypeGeniusAiPanel(
                     val res = result
                     val rewritten = res?.rewrittenText.orEmpty()
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        if (selectedAction == TypeGeniusAiAction.CUSTOM) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                quickPrompts.forEach { (label, prompt) ->
+                                    val isCurrent = customPromptText == prompt
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (isCurrent) colors.accent.copy(alpha = 0.25f) else colors.keySpecialBackground)
+                                            .clickable {
+                                                onHaptic()
+                                                customPromptText = prompt
+                                                execute(TypeGeniusAiAction.CUSTOM, prompt = prompt)
+                                            }
+                                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(label, color = if (isCurrent) colors.accent else colors.textSecondary, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
                         Column(
                             modifier = Modifier
                                 .weight(1f)
