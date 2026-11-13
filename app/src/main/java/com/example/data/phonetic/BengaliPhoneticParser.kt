@@ -116,7 +116,78 @@ object BengaliPhoneticParser {
         "dekhte" to listOf("দেখতে"),
         "bolo" to listOf("বলো", "বল"),
         "shuno" to listOf("শুনো", "শোন"),
-        "shunlam" to listOf("শুনলাম")
+        "shunlam" to listOf("শুনলাম"),
+        "emon" to listOf("এমন"),
+        "translator" to listOf("ট্রান্সলেটর"),
+        "onubad" to listOf("অনুবাদ"),
+        "obostha" to listOf("অবস্থা"),
+        "kothay" to listOf("কোথায়", "কোথায়"),
+        "koi" to listOf("কই"),
+        "jao" to listOf("যাও"),
+        "asho" to listOf("আসো"),
+        "khao" to listOf("খাও"),
+        "bosh" to listOf("বস"),
+        "bosho" to listOf("বসো"),
+        "valo" to listOf("ভালো", "ভাল"),
+        "kharap" to listOf("খারাপ"),
+        "shundor" to listOf("সুন্দর"),
+        "khushi" to listOf("খুশি"),
+        "dukkhito" to listOf("দুঃখিত"),
+        "shagotom" to listOf("স্বাগতম"),
+        "obhinondon" to listOf("অভিনন্দন"),
+        "taka" to listOf("টাকা"),
+        "dam" to listOf("দাম"),
+        "koto" to listOf("কত"),
+        "onek" to listOf("অনেক"),
+        "ektu" to listOf("একটু"),
+        "ekhon" to listOf("এখন"),
+        "ekhane" to listOf("এখানে"),
+        "sekhane" to listOf("সেখানে"),
+        "taratari" to listOf("তাড়াতাড়ি"),
+        "aste" to listOf("আস্তে"),
+        "bujhte" to listOf("বুঝতে"),
+        "parchi" to listOf("পারছি"),
+        "pari" to listOf("পারি"),
+        "lagche" to listOf("লাগছে"),
+        "khida" to listOf("ক্ষুধা"),
+        "bashay" to listOf("বাসায়"),
+        "barite" to listOf("বাড়িতে"),
+        "nam" to listOf("নাম"),
+        "tomader" to listOf("তোমাদের"),
+        "amra" to listOf("আমরা"),
+        "tara" to listOf("তারা"),
+        "se" to listOf("সে"),
+        "tar" to listOf("তার"),
+        "eta" to listOf("এটা"),
+        "ota" to listOf("ওটা"),
+        "ei" to listOf("এই"),
+        "oi" to listOf("ওই"),
+        "ebong" to listOf("এবং"),
+        "kintu" to listOf("কিন্তু"),
+        "jodi" to listOf("যদি"),
+        "tahole" to listOf("তাহলে"),
+        "karone" to listOf("কারণে"),
+        "jonno" to listOf("জন্য"),
+        "theke" to listOf("থেকে"),
+        "diye" to listOf("দিয়ে"),
+        "niye" to listOf("নিয়ে"),
+        "kore" to listOf("করে"),
+        "koro" to listOf("করো"),
+        "korun" to listOf("করুন"),
+        "kori" to listOf("করি"),
+        "chai" to listOf("চাই"),
+        "lagbe" to listOf("লাগবে"),
+        "dorkar" to listOf("দরকার"),
+        "shomossa" to listOf("সমস্যা"),
+        "nei" to listOf("নেই"),
+        "nai" to listOf("নাই"),
+        "ache" to listOf("আছে"),
+        "chilo" to listOf("ছিল"),
+        "mon" to listOf("মন"),
+        "prem" to listOf("প্রেম"),
+        "bhalobasha" to listOf("ভালোবাসা"),
+        "valobasha" to listOf("ভালোবাসা"),
+        "shukriya" to listOf("শুকরিয়া")
     )
 
     private val consonants = mapOf(
@@ -221,7 +292,11 @@ object BengaliPhoneticParser {
         // 3. Algorithmic transliteration
         val transliterated = transliterateAlgorithmic(input)
         if (transliterated.isNotBlank() && !results.contains(transliterated)) {
-            results.add(0, transliterated) // Add as top or alternate
+            if (commonWordMap.containsKey(lower)) {
+                results.add(transliterated)
+            } else {
+                results.add(0, transliterated)
+            }
         }
 
         // Always keep the raw English input as a fallback candidate at the end
@@ -312,5 +387,82 @@ object BengaliPhoneticParser {
         }
 
         return sb.toString()
+    }
+
+    private val reverseBengaliMap: Map<String, String> by lazy {
+        val map = LinkedHashMap<String, String>()
+        for ((roman, bengaliList) in commonWordMap) {
+            for (bn in bengaliList) {
+                if (!map.containsKey(bn)) {
+                    map[bn] = roman
+                }
+            }
+        }
+        map["হ্যালো"] = "hello"
+        map["হাই"] = "hi"
+        map["কেমন"] = "kemon"
+        map["আছেন"] = "achen"
+        map["ভালোবাসি"] = "valobashi"
+        map["দুঃখিত"] = "dukkhito"
+        map["স্বাগতম"] = "shagotom"
+        map["রাত্রি"] = "ratri"
+        map
+    }
+
+    fun transliterateSentenceToBengali(banglishInput: String): String {
+        val trimmed = banglishInput.trim()
+        if (trimmed.isEmpty()) return trimmed
+        if (trimmed.none { it in 'a'..'z' || it in 'A'..'Z' }) return trimmed
+        return trimmed.split(Regex("\\s+")).joinToString(" ") { raw ->
+            val leading = raw.takeWhile { !it.isLetterOrDigit() }
+            val trailing = raw.takeLastWhile { !it.isLetterOrDigit() }
+            val core = raw.removePrefix(leading).removeSuffix(trailing)
+            if (core.isEmpty() || core.none { it in 'a'..'z' || it in 'A'..'Z' }) {
+                raw
+            } else {
+                val mapped = parsePhonetic(core).firstOrNull() ?: core
+                "$leading$mapped$trailing"
+            }
+        }.replace(".", "।")
+    }
+
+    fun romanizeBengali(bengaliInput: String): String {
+        val trimmed = bengaliInput.trim()
+        if (trimmed.isEmpty()) return trimmed
+        return trimmed.split(Regex("\\s+")).joinToString(" ") { raw ->
+            val leading = raw.takeWhile { !Character.isLetterOrDigit(it) && Character.getType(it).toByte() !in listOf(Character.NON_SPACING_MARK, Character.COMBINING_SPACING_MARK, Character.ENCLOSING_MARK) }
+            val trailing = raw.takeLastWhile { !Character.isLetterOrDigit(it) && Character.getType(it).toByte() !in listOf(Character.NON_SPACING_MARK, Character.COMBINING_SPACING_MARK, Character.ENCLOSING_MARK) }
+            val core = raw.removePrefix(leading).removeSuffix(trailing)
+            if (core.isEmpty()) {
+                raw
+            } else {
+                val mapped = reverseBengaliMap[core] ?: romanizeAlgorithmic(core)
+                val fixedTrailing = trailing.replace('।', '.')
+                "$leading$mapped$fixedTrailing"
+            }
+        }
+    }
+
+    private fun romanizeAlgorithmic(word: String): String {
+        val chars = mapOf(
+            'অ' to "o", 'আ' to "a", 'ই' to "i", 'ঈ' to "ee", 'উ' to "u", 'ঊ' to "oo",
+            'ঋ' to "ri", 'এ' to "e", 'ঐ' to "oi", 'ও' to "o", 'ঔ' to "ou",
+            'া' to "a", 'ি' to "i", 'ী' to "ee", 'ু' to "u", 'ূ' to "oo",
+            'ৃ' to "ri", 'ে' to "e", 'ৈ' to "oi", 'ো' to "o", 'ৌ' to "ou",
+            'ক' to "k", 'খ' to "kh", 'গ' to "g", 'ঘ' to "gh", 'ঙ' to "ng",
+            'চ' to "ch", 'ছ' to "chh", 'জ' to "j", 'ঝ' to "jh", 'ঞ' to "n",
+            'ট' to "t", 'ঠ' to "th", 'ড' to "d", 'ঢ' to "dh", 'ণ' to "n",
+            'ত' to "t", 'থ' to "th", 'দ' to "d", 'ধ' to "dh", 'ন' to "n",
+            'প' to "p", 'ফ' to "f", 'ব' to "b", 'ভ' to "bh", 'ম' to "m",
+            'য' to "j", 'র' to "r", 'ল' to "l", 'শ' to "sh", 'ষ' to "sh",
+            'স' to "s", 'হ' to "h", 'ড়' to "r", 'ঢ়' to "rh", 'য়' to "y",
+            'ৎ' to "t", 'ং' to "ng", 'ঃ' to "h", 'ঁ' to "n", '্' to ""
+        )
+        val out = StringBuilder()
+        for (i in word.indices) {
+            val ch = word[i]
+            out.append(chars[ch] ?: ch.toString())
+        }
+        return out.toString()
     }
 }

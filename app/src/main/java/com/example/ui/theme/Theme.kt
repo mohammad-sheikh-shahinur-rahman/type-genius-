@@ -44,7 +44,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun TypeGeniusTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep TypeGenius custom branding bold & consistent
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
@@ -53,7 +53,7 @@ fun TypeGeniusTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> DarkColorScheme
-        else -> DarkColorScheme // Default to dark for high-tech cyber keyboard aesthetic
+        else -> LightColorScheme
     }
 
     MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)

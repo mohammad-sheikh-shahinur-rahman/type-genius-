@@ -118,9 +118,9 @@ fun SpacebarComponent(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(8.dp))
+            .shadow(if (isPressed) 0.dp else 1.dp, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(currentBgColor)
-            .shadow(if (isPressed) 0.dp else 1.dp, RoundedCornerShape(8.dp))
             .testTag("spacebar_key")
             .semantics {
                 contentDescription = "Spacebar, current language ${activeLanguage.displayName}"
@@ -227,8 +227,8 @@ fun SpacebarComponent(
             if (showLanguageLabel) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(accentColor.copy(alpha = if (isPressed) 0.3f else 0.15f))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isPressed || swipeTriggered) accentColor.copy(alpha = 0.18f) else Color.Transparent)
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -248,10 +248,10 @@ fun SpacebarComponent(
                         label = "languagePill"
                     ) { targetLang ->
                         Text(
-                            text = if (canSwipe) "◀  ${targetLang.spacebarLabel}  ▶" else targetLang.spacebarLabel,
-                            color = textColor,
+                            text = if (canSwipe && isPressed) "◀  ${targetLang.spacebarLabel}  ▶" else targetLang.spacebarLabel,
+                            color = textColor.copy(alpha = 0.72f),
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
                     }

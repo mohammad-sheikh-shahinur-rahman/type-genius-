@@ -30,6 +30,20 @@ data class ClipboardItem(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "translation_memory")
+data class TranslationMemoryEntry(
+    @PrimaryKey val cacheKey: String,
+    val sourceText: String,
+    val translatedText: String,
+    val sourceLang: String,
+    val targetLang: String,
+    val strategy: String,
+    val confidence: Float = 1.0f,
+    val isPinned: Boolean = false,
+    val hitCount: Int = 1,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface WordDao {
     @Query("SELECT * FROM learned_words WHERE language = :lang ORDER BY frequency DESC, lastUsed DESC LIMIT :limit")
@@ -66,10 +80,42 @@ interface ClipboardDao {
     suspend fun clearUnpinned()
 }
 
-@Database(entities = [LearnedWord::class, ClipboardItem::class], version = 1, exportSchema = false)
+@Dao
+interface TranslationMemoryDao {
+    @Query("SELECT * FROM translation_memory WHERE cacheKey = :cacheKey LIMIT 1")
+    suspend fun findByKey(cacheKey: String): TranslationMemoryEntry?
+
+    @Query("SELECT * FROM translation_memory ORDER BY isPinned DESC, timestamp DESC LIMIT 40")
+    fun observeHistory(): Flow<List<TranslationMemoryEntry>>
+
+    @Query("SELECT COUNT(*) FROM translation_memory")
+    suspend fun countAll(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entry: TranslationMemoryEntry)
+
+    @Query("UPDATE translation_memory SET hitCount = hitCount + 1, timestamp = :now WHERE cacheKey = :cacheKey")
+    suspend fun recordHit(cacheKey: String, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE translation_memory SET isPinned = :pinned WHERE cacheKey = :cacheKey")
+    suspend fun setPinned(cacheKey: String, pinned: Boolean)
+
+    @Query("DELETE FROM translation_memory WHERE cacheKey = :cacheKey")
+    suspend fun deleteByKey(cacheKey: String)
+
+    @Query("DELETE FROM translation_memory WHERE isPinned = 0")
+    suspend fun clearUnpinned()
+}
+
+@Database(
+    entities = [LearnedWord::class, ClipboardItem::class, TranslationMemoryEntry::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class TypeGeniusDatabase : RoomDatabase() {
     abstract fun wordDao(): WordDao
     abstract fun clipboardDao(): ClipboardDao
+    abstract fun translationMemoryDao(): TranslationMemoryDao
 
     companion object {
         @Volatile

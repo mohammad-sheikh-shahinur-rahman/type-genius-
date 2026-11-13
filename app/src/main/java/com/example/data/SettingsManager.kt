@@ -8,8 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
 import com.example.model.LanguageId
+import com.example.model.OneHandedMode
 import com.example.model.SwipeSensitivity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,6 +32,13 @@ class SettingsManager(private val context: Context) {
         val KEY_THEME = stringPreferencesKey("keyboard_theme")
         val KEY_NUMBER_ROW = booleanPreferencesKey("number_row_enabled")
         val KEY_SOUND_ON_KEY = booleanPreferencesKey("sound_on_keypress")
+        val KEY_AUTO_CAPITALIZE = booleanPreferencesKey("auto_capitalize")
+        val KEY_SPELL_CHECK = booleanPreferencesKey("spell_check_enabled")
+        val KEY_ONE_HANDED_MODE = stringPreferencesKey("one_handed_mode")
+        val KEY_KEYBOARD_HEIGHT = stringPreferencesKey("keyboard_height_preset")
+        val KEY_FLOATING_MODE = booleanPreferencesKey("floating_mode_enabled")
+        val KEY_TRANSLATOR_SRC = stringPreferencesKey("translator_source_lang")
+        val KEY_TRANSLATOR_TGT = stringPreferencesKey("translator_target_lang")
         val KEY_GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
 
         @Volatile
@@ -67,6 +76,7 @@ class SettingsManager(private val context: Context) {
         prefs[KEY_ENABLED_LANGUAGES] ?: setOf(
             LanguageId.BANGLA_PROBHAT.code,
             LanguageId.BANGLA_PHONETIC.code,
+            LanguageId.SYLHETI.code,
             LanguageId.ENGLISH.code,
             LanguageId.HINDI.code,
             LanguageId.ARABIC.code
@@ -82,16 +92,44 @@ class SettingsManager(private val context: Context) {
     }
 
     val keyboardTheme: Flow<KeyboardTheme> = context.dataStore.data.map { prefs ->
-        val raw = prefs[KEY_THEME] ?: KeyboardTheme.TYPEGENIUS_PURPLE.id
+        val raw = prefs[KEY_THEME] ?: KeyboardTheme.MATERIAL_YOU.id
         KeyboardTheme.fromId(raw)
     }
 
     val numberRowEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_NUMBER_ROW] ?: true
+        prefs[KEY_NUMBER_ROW] ?: false
     }
 
     val soundOnKeyPress: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SOUND_ON_KEY] ?: false
+    }
+
+    val autoCapitalize: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AUTO_CAPITALIZE] ?: true
+    }
+
+    val spellCheckEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SPELL_CHECK] ?: true
+    }
+
+    val oneHandedMode: Flow<OneHandedMode> = context.dataStore.data.map { prefs ->
+        OneHandedMode.fromId(prefs[KEY_ONE_HANDED_MODE] ?: OneHandedMode.FULL.id)
+    }
+
+    val keyboardHeightPreset: Flow<KeyboardHeightPreset> = context.dataStore.data.map { prefs ->
+        KeyboardHeightPreset.fromId(prefs[KEY_KEYBOARD_HEIGHT] ?: KeyboardHeightPreset.NORMAL.id)
+    }
+
+    val floatingMode: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FLOATING_MODE] ?: false
+    }
+
+    val translatorSourceCode: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_TRANSLATOR_SRC] ?: "bn"
+    }
+
+    val translatorTargetCode: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_TRANSLATOR_TGT] ?: "en"
     }
 
     val geminiApiKey: Flow<String> = context.dataStore.data.map { prefs ->
@@ -140,6 +178,33 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setSoundOnKeyPress(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SOUND_ON_KEY] = enabled }
+    }
+
+    suspend fun setAutoCapitalize(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AUTO_CAPITALIZE] = enabled }
+    }
+
+    suspend fun setSpellCheckEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SPELL_CHECK] = enabled }
+    }
+
+    suspend fun setOneHandedMode(mode: OneHandedMode) {
+        context.dataStore.edit { it[KEY_ONE_HANDED_MODE] = mode.id }
+    }
+
+    suspend fun setKeyboardHeightPreset(preset: KeyboardHeightPreset) {
+        context.dataStore.edit { it[KEY_KEYBOARD_HEIGHT] = preset.id }
+    }
+
+    suspend fun setFloatingMode(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_FLOATING_MODE] = enabled }
+    }
+
+    suspend fun setTranslatorLanguages(sourceCode: String, targetCode: String) {
+        context.dataStore.edit {
+            it[KEY_TRANSLATOR_SRC] = sourceCode
+            it[KEY_TRANSLATOR_TGT] = targetCode
+        }
     }
 
     suspend fun setGeminiApiKey(key: String) {
