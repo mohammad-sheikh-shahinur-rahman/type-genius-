@@ -378,7 +378,7 @@ fun KeyboardView(
                 if (floatingMode) {
                     Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 } else {
-                    Modifier
+                    Modifier.padding(bottom = 12.dp)
                 }
             )
             .then(
@@ -1240,12 +1240,12 @@ fun KeyboardView(
                 }
             }
 
-            // Reserve clean system navigation bar space so OS single chin bar (⌄ / ⌨) never overlaps keys
+            // Reserve clean system navigation bar space with generous padding so OS single chin bar never touches or overlaps keys
             Spacer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .height(4.dp)
+                    .height(16.dp)
             )
         }
         }

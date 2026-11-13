@@ -62,11 +62,15 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.School
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -621,6 +625,27 @@ fun HomeScreen(
                                     Text(tag, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = TGMagenta)
                                 }
                             }
+                        }
+
+                        var showAppTutorial by remember { mutableStateOf(false) }
+                        if (showAppTutorial) {
+                            com.example.ui.app.FullAppInteractiveTutorialOverlay(
+                                onDismiss = { showAppTutorial = false }
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAppTutorial = true },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TGMagenta),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TGMagenta),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("launch_app_tutorial_button")
+                        ) {
+                            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("💡 ইন্টারেক্টিভ টিউটোরিয়াল শুরু করুন (Interactive Tutorial)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
