@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -51,6 +52,15 @@ class SettingsManager(private val context: Context) {
         val KEY_SOUND_PROFILE = stringPreferencesKey("sound_profile")
         val KEY_GLIDE_TYPING = booleanPreferencesKey("glide_typing_enabled")
         val KEY_BACKSPACE_SWIPE = booleanPreferencesKey("backspace_swipe_delete")
+
+        val KEY_LARGE_NUMBER_ROW = booleanPreferencesKey("large_number_row")
+        val KEY_HIDE_LONG_PRESS_HINTS = booleanPreferencesKey("hide_long_press_hints")
+        val KEY_HEIGHT_PORTRAIT = intPreferencesKey("keyboard_height_portrait")
+        val KEY_HEIGHT_LANDSCAPE = intPreferencesKey("keyboard_height_landscape")
+        val KEY_ONE_HANDED_PORTRAIT = intPreferencesKey("one_handed_width_portrait")
+        val KEY_ONE_HANDED_LANDSCAPE = intPreferencesKey("one_handed_width_landscape")
+        val KEY_SPLIT_FOLDABLE = booleanPreferencesKey("split_keyboard_foldable")
+        val KEY_ALWAYS_ENTER = booleanPreferencesKey("always_enter_button")
 
         @Volatile
         private var instance: SettingsManager? = null
@@ -179,6 +189,15 @@ class SettingsManager(private val context: Context) {
         prefs[KEY_BACKSPACE_SWIPE] ?: true
     }
 
+    val largeNumberRow: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_LARGE_NUMBER_ROW] ?: false }
+    val hideLongPressHints: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_HIDE_LONG_PRESS_HINTS] ?: false }
+    val keyboardHeightPortrait: Flow<Int> = context.dataStore.data.map { prefs -> prefs[KEY_HEIGHT_PORTRAIT] ?: 100 }
+    val keyboardHeightLandscape: Flow<Int> = context.dataStore.data.map { prefs -> prefs[KEY_HEIGHT_LANDSCAPE] ?: 100 }
+    val oneHandedWidthPortrait: Flow<Int> = context.dataStore.data.map { prefs -> prefs[KEY_ONE_HANDED_PORTRAIT] ?: 85 }
+    val oneHandedWidthLandscape: Flow<Int> = context.dataStore.data.map { prefs -> prefs[KEY_ONE_HANDED_LANDSCAPE] ?: 40 }
+    val splitKeyboardFoldable: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_SPLIT_FOLDABLE] ?: true }
+    val alwaysEnterButton: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[KEY_ALWAYS_ENTER] ?: true }
+
     suspend fun setSpacebarSwipeEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SPACEBAR_SWIPE] = enabled }
     }
@@ -285,4 +304,13 @@ class SettingsManager(private val context: Context) {
     suspend fun setBackspaceSwipeEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_BACKSPACE_SWIPE] = enabled }
     }
+
+    suspend fun setLargeNumberRow(enabled: Boolean) { context.dataStore.edit { it[KEY_LARGE_NUMBER_ROW] = enabled } }
+    suspend fun setHideLongPressHints(hide: Boolean) { context.dataStore.edit { it[KEY_HIDE_LONG_PRESS_HINTS] = hide } }
+    suspend fun setKeyboardHeightPortrait(pct: Int) { context.dataStore.edit { it[KEY_HEIGHT_PORTRAIT] = pct.coerceIn(50, 150) } }
+    suspend fun setKeyboardHeightLandscape(pct: Int) { context.dataStore.edit { it[KEY_HEIGHT_LANDSCAPE] = pct.coerceIn(50, 150) } }
+    suspend fun setOneHandedWidthPortrait(pct: Int) { context.dataStore.edit { it[KEY_ONE_HANDED_PORTRAIT] = pct.coerceIn(50, 100) } }
+    suspend fun setOneHandedWidthLandscape(pct: Int) { context.dataStore.edit { it[KEY_ONE_HANDED_LANDSCAPE] = pct.coerceIn(30, 90) } }
+    suspend fun setSplitKeyboardFoldable(enabled: Boolean) { context.dataStore.edit { it[KEY_SPLIT_FOLDABLE] = enabled } }
+    suspend fun setAlwaysEnterButton(enabled: Boolean) { context.dataStore.edit { it[KEY_ALWAYS_ENTER] = enabled } }
 }

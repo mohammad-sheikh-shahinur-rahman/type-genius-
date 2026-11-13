@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -81,6 +82,7 @@ import androidx.core.content.ContextCompat
 import com.example.data.SettingsManager
 import com.example.model.LanguageId
 import com.example.model.SwipeSensitivity
+import com.example.ui.app.AppearanceAndLayoutScreen
 import com.example.ui.app.BackendlessVerificationScreen
 import com.example.ui.app.GeneralSettingsScreen
 import com.example.ui.app.GestureSettingsScreen
@@ -159,9 +161,9 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         "Home" to Icons.Default.Keyboard,
+        "Layout" to Icons.Default.Palette,
         "Gestures" to Icons.Default.SwapHoriz,
         "Languages" to Icons.Default.Language,
-        "Backendless" to Icons.Default.Security,
         "Settings" to Icons.Default.Settings
     )
 
@@ -241,13 +243,13 @@ fun MainScreen(
                                 onOpenImeSettings = onOpenImeSettings,
                                 onOpenImePicker = onOpenImePicker,
                                 checkImeStatus = checkImeStatus,
-                                onNavigateToGestures = { selectedTab = 1 },
-                                onNavigateToLanguages = { selectedTab = 2 },
-                                onNavigateToBackendless = { selectedTab = 3 }
+                                onNavigateToGestures = { selectedTab = 2 },
+                                onNavigateToLanguages = { selectedTab = 3 },
+                                onNavigateToBackendless = { selectedTab = 4 }
                             )
-                            1 -> GestureSettingsScreen(settingsManager = settingsManager)
-                            2 -> LanguagesScreen(settingsManager = settingsManager)
-                            3 -> BackendlessVerificationScreen()
+                            1 -> AppearanceAndLayoutScreen(settingsManager = settingsManager)
+                            2 -> GestureSettingsScreen(settingsManager = settingsManager)
+                            3 -> LanguagesScreen(settingsManager = settingsManager)
                             4 -> GeneralSettingsScreen(settingsManager = settingsManager)
                         }
                     }

@@ -1070,3 +1070,131 @@ private fun BadgeLabel(text: String, color: Color) {
         Text(text, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+@Composable
+fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
+    val scope = rememberCoroutineScope()
+
+    val numberRowEnabled by settingsManager.numberRowEnabled.collectAsState(initial = false)
+    val largeNumberRow by settingsManager.largeNumberRow.collectAsState(initial = false)
+    val hideLongPressHints by settingsManager.hideLongPressHints.collectAsState(initial = false)
+    val heightPortrait by settingsManager.keyboardHeightPortrait.collectAsState(initial = 100)
+    val heightLandscape by settingsManager.keyboardHeightLandscape.collectAsState(initial = 100)
+    val oneHandedPortrait by settingsManager.oneHandedWidthPortrait.collectAsState(initial = 85)
+    val oneHandedLandscape by settingsManager.oneHandedWidthLandscape.collectAsState(initial = 40)
+    val oneHandedMode by settingsManager.oneHandedMode.collectAsState(initial = OneHandedMode.FULL)
+    val splitFoldable by settingsManager.splitKeyboardFoldable.collectAsState(initial = true)
+    val alwaysEnter by settingsManager.alwaysEnterButton.collectAsState(initial = true)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("চেহারা ও লে-আউট (Appearance & Layout)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text("কিবোর্ডের সারি, উচ্চতা, প্রস্থ এবং লে-আউট কাস্টমাইজ করুন", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                SettingToggleRow(
+                    title = "নম্বর সারি চালু করুন",
+                    subtitle = "একটি অতিরিক্ত সারি যোগ হবে",
+                    checked = numberRowEnabled,
+                    onCheckedChange = { scope.launch { settingsManager.setNumberRowEnabled(it) } }
+                )
+
+                SettingToggleRow(
+                    title = "বড় নম্বর সারি",
+                    subtitle = "নম্বর সারির ফন্ট ও প্যাডিং বড় করুন",
+                    checked = largeNumberRow,
+                    onCheckedChange = { scope.launch { settingsManager.setLargeNumberRow(it) } }
+                )
+
+                SettingToggleRow(
+                    title = "লং প্রেস হিপ্ট লুকান",
+                    subtitle = "পরিচ্ছন্ন চেহারার জন্য কী-এর কোণে থাকা ছোট লেখা লুকান",
+                    checked = hideLongPressHints,
+                    onCheckedChange = { scope.launch { settingsManager.setHideLongPressHints(it) } }
+                )
+
+                Text("কিবোর্დის উচ্চতা (পোর্ট্রেট): $heightPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(80, 90, 100, 110, 125).forEach { pct ->
+                        FilterChip(
+                            selected = heightPortrait == pct,
+                            onClick = { scope.launch { settingsManager.setKeyboardHeightPortrait(pct) } },
+                            label = { Text("$pct%", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Text("কিবোর্დის উচ্চতা (ল্যান্ডস্কেপ): $heightLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(75, 90, 100, 115).forEach { pct ->
+                        FilterChip(
+                            selected = heightLandscape == pct,
+                            onClick = { scope.launch { settingsManager.setKeyboardHeightLandscape(pct) } },
+                            label = { Text("$pct%", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Text("এক হাতে কিবোর্দের প্রস্থ (পোর্ট্রেট): $oneHandedPortrait%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(70, 80, 85, 95, 100).forEach { pct ->
+                        FilterChip(
+                            selected = oneHandedPortrait == pct,
+                            onClick = { scope.launch { settingsManager.setOneHandedWidthPortrait(pct) } },
+                            label = { Text("$pct%", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Text("এক হাতে কিবোর্দের প্রস্থ (ল্যান্ডস্কেপ): $oneHandedLandscape%", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(35, 40, 50, 60).forEach { pct ->
+                        FilterChip(
+                            selected = oneHandedLandscape == pct,
+                            onClick = { scope.launch { settingsManager.setOneHandedWidthLandscape(pct) } },
+                            label = { Text("$pct%", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                SettingToggleRow(
+                    title = "স্প্লিট কিবোর্ড চালু",
+                    subtitle = "দুই ভাগে বিভক্ত কিবোর্ড লেআউট",
+                    checked = oneHandedMode == OneHandedMode.SPLIT,
+                    onCheckedChange = { checked ->
+                        scope.launch {
+                            settingsManager.setOneHandedMode(if (checked) OneHandedMode.SPLIT else OneHandedMode.FULL)
+                        }
+                    }
+                )
+
+                SettingToggleRow(
+                    title = "ভাঁজযোগ্য ফোনের জন্য স্প্লিট কিবোর্ড চালু করুন",
+                    subtitle = "ফোল্ডেবল ডিভাইসে অটো স্প্লিট মোড",
+                    checked = splitFoldable,
+                    onCheckedChange = { scope.launch { settingsManager.setSplitKeyboardFoldable(it) } }
+                )
+
+                SettingToggleRow(
+                    title = "সব সময় এন্টার বাটন",
+                    subtitle = "এন্টার বাটনে সবসময় রটার্ন আইকন দেখান",
+                    checked = alwaysEnter,
+                    onCheckedChange = { scope.launch { settingsManager.setAlwaysEnterButton(it) } }
+                )
+            }
+        }
+    }
+}
