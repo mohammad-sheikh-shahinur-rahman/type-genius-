@@ -30,7 +30,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
 import com.example.data.SettingsManager
-import com.example.data.ai.GemTypeAiEngine
+import com.example.data.ai.TypeGeniusAiEngine
 import com.example.data.dictionary.DictionaryManager
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.GrammarSuggestion
@@ -1331,7 +1331,7 @@ class TypeGeniusIME : InputMethodService(),
                 } else emptyList()
                 activeGrammarSuggestions = grammarFixes.associateBy { it.displayLabel }
                 liveGrammarIssueCount = if (spellCheckEnabled && plainContext.isNotBlank()) {
-                    GemTypeAiEngine.collectLocalCorrections(plainContext, activeLanguage).size
+                    TypeGeniusAiEngine.collectLocalCorrections(plainContext, activeLanguage).size
                 } else 0
 
                 val dictPreds = dictionaryManager.getPredictions(

@@ -1,8 +1,8 @@
 package com.example
 
 import com.example.data.KeyboardFontPreset
-import com.example.data.ai.GemTypeAction
-import com.example.data.ai.GemTypeAiEngine
+import com.example.data.ai.TypeGeniusAiAction
+import com.example.data.ai.TypeGeniusAiEngine
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.OfflineGlideEngine
 import com.example.data.dictionary.OfflineGrammarEngine
@@ -422,7 +422,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testKeyboardToolId_defaultToolbarContainsTextEditingAndGemTypeAi() {
+    fun testKeyboardToolId_defaultToolbarContainsTextEditingAndTypeGeniusAi() {
         val defaults = KeyboardToolId.DEFAULT_TOOLBAR
         assertTrue(defaults.contains(KeyboardToolId.TEXT_EDITING))
         assertTrue(defaults.contains(KeyboardToolId.GEMINI_AI))
@@ -432,11 +432,11 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testGemTypeAiEngine_offlineProofreadRewriteAndNativeConversion() = runBlocking {
+    fun testTypeGeniusAiEngine_offlineProofreadRewriteAndNativeConversion() = runBlocking {
         // Multi-fix CHECK with selective applyCorrections
-        val checkRes = GemTypeAiEngine.runAction(
+        val checkRes = TypeGeniusAiEngine.runAction(
             text = "she don't recieve a apple",
-            action = GemTypeAction.CHECK,
+            action = TypeGeniusAiAction.CHECK,
             activeLanguage = LanguageId.ENGLISH,
             apiKey = ""
         )
@@ -446,7 +446,7 @@ class ExampleUnitTest {
         assertTrue(checkRes.rewrittenText.contains("an apple"))
 
         // Selective keep/skip: keep only the first and third fixes
-        val selective = GemTypeAiEngine.applyCorrections(
+        val selective = TypeGeniusAiEngine.applyCorrections(
             text = "she don't recieve a apple",
             corrections = listOf(checkRes.corrections.first(), checkRes.corrections.last())
         )
@@ -455,18 +455,18 @@ class ExampleUnitTest {
         assertTrue(selective.contains("an apple"))
 
         // Shorten removes filler words
-        val shortenRes = GemTypeAiEngine.runAction(
+        val shortenRes = TypeGeniusAiEngine.runAction(
             text = "I am basically really very happy",
-            action = GemTypeAction.SHORTEN,
+            action = TypeGeniusAiAction.SHORTEN,
             activeLanguage = LanguageId.ENGLISH,
             apiKey = ""
         )
         assertEquals("I am happy", shortenRes.rewrittenText)
 
         // Formal & Casual register transforms
-        val formalRes = GemTypeAiEngine.runAction(
+        val formalRes = TypeGeniusAiEngine.runAction(
             text = "hey i'm late pls wait",
-            action = GemTypeAction.FORMAL,
+            action = TypeGeniusAiAction.FORMAL,
             activeLanguage = LanguageId.ENGLISH,
             apiKey = ""
         )
@@ -474,9 +474,9 @@ class ExampleUnitTest {
         assertTrue(formalRes.rewrittenText.contains("I am"))
         assertTrue(formalRes.rewrittenText.contains("please"))
 
-        val casualRes = GemTypeAiEngine.runAction(
+        val casualRes = TypeGeniusAiEngine.runAction(
             text = "I am sorry, do not worry, thank you",
-            action = GemTypeAction.CASUAL,
+            action = TypeGeniusAiAction.CASUAL,
             activeLanguage = LanguageId.ENGLISH,
             apiKey = ""
         )
@@ -485,17 +485,17 @@ class ExampleUnitTest {
         assertTrue(casualRes.rewrittenText.contains("thanks"))
 
         // Romanized Banglish -> Native Bengali script & English with Read As back-translation
-        val nativeRes = GemTypeAiEngine.runAction(
+        val nativeRes = TypeGeniusAiEngine.runAction(
             text = "ami bangla valobashi",
-            action = GemTypeAction.NATIVE,
+            action = TypeGeniusAiAction.NATIVE,
             activeLanguage = LanguageId.BANGLA_PHONETIC,
             apiKey = ""
         )
         assertTrue("Expected Bengali script: ${nativeRes.rewrittenText}", nativeRes.rewrittenText.contains("আমি"))
 
-        val englishRes = GemTypeAiEngine.runAction(
+        val englishRes = TypeGeniusAiEngine.runAction(
             text = "ami tomake valobashi",
-            action = GemTypeAction.ENGLISH,
+            action = TypeGeniusAiAction.ENGLISH,
             activeLanguage = LanguageId.BANGLA_PHONETIC,
             apiKey = ""
         )

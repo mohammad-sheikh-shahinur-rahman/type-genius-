@@ -8,7 +8,7 @@ import com.example.model.LanguageId
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class GemTypeAction(val label: String, val resultLabel: String) {
+enum class TypeGeniusAiAction(val label: String, val resultLabel: String) {
     CHECK("Check", "Proofread"),
     FIX("Fix", "Suggested fix"),
     IMPROVE("Improve", "Improved"),
@@ -32,7 +32,7 @@ enum class CorrectionCategory {
     }
 }
 
-data class GemTypeCorrection(
+data class TypeGeniusAiCorrection(
     val original: String,
     val replacement: String,
     val explanation: String,
@@ -41,24 +41,24 @@ data class GemTypeCorrection(
     val end: Int = -1
 )
 
-data class GemTypeResult(
-    val action: GemTypeAction,
+data class TypeGeniusAiResult(
+    val action: TypeGeniusAiAction,
     val originalText: String,
     val rewrittenText: String,
     val nativeReadAs: String? = null,
-    val corrections: List<GemTypeCorrection> = emptyList(),
+    val corrections: List<TypeGeniusAiCorrection> = emptyList(),
     val usedGeminiApi: Boolean = false,
     val statusNote: String = ""
 )
 
 /**
- * Brings the complete GemType-Keyboard AI feature set into TypeGenius:
+ * Brings the complete TypeGenius AI feature set:
  * - Proofreader (`CHECK`) with verbatim span diff + category + explanation + selective apply
  * - One-tap rewrites (`FIX`, `IMPROVE`, `SHORTEN`, `FORMAL`, `CASUAL`) + "Try another" (`avoid`)
  * - Romanized Banglish/Hinglish -> Native Script (`NATIVE`) & Clear English (`ENGLISH`) with "Read as" check
  * - Direct user-key Gemini API calls when a key is provided, plus an immediate on-device fallback when offline/keyless
  */
-object GemTypeAiEngine {
+object TypeGeniusAiEngine {
 
     private val client = GeminiDirectClient()
 
@@ -115,14 +115,14 @@ object GemTypeAiEngine {
 
     suspend fun runAction(
         text: String,
-        action: GemTypeAction,
+        action: TypeGeniusAiAction,
         activeLanguage: LanguageId,
         apiKey: String,
         avoidPrevious: List<String> = emptyList()
-    ): GemTypeResult {
+    ): TypeGeniusAiResult {
         val clean = text.trim()
         if (clean.isEmpty()) {
-            return GemTypeResult(
+            return TypeGeniusAiResult(
                 action = action,
                 originalText = text,
                 rewrittenText = "",
@@ -132,7 +132,7 @@ object GemTypeAiEngine {
 
         if (apiKey.isNotBlank()) {
             val remote = when (action) {
-                GemTypeAction.CHECK -> runGeminiCheck(clean, activeLanguage, apiKey)
+                TypeGeniusAiAction.CHECK -> runGeminiCheck(clean, activeLanguage, apiKey)
                 else -> runGeminiRewrite(clean, action, activeLanguage, apiKey, avoidPrevious)
             }
             if (remote.isSuccess) {
@@ -149,7 +149,7 @@ object GemTypeAiEngine {
         text: String,
         languageId: LanguageId,
         apiKey: String
-    ): Result<GemTypeResult> {
+    ): Result<TypeGeniusAiResult> {
         val langName = languageId.displayName
         val langRule = when {
             languageId.code.startsWith("bn") || languageId == LanguageId.SYLHETI ->
@@ -175,24 +175,24 @@ object GemTypeAiEngine {
             val rawArray = json.optJSONArray("corrections") ?: JSONArray()
             val located = locateCorrections(text, rawArray)
             val fixedText = applyCorrections(text, located)
-            GemTypeResult(
-                action = GemTypeAction.CHECK,
+            TypeGeniusAiResult(
+                action = TypeGeniusAiAction.CHECK,
                 originalText = text,
                 rewrittenText = fixedText,
                 corrections = located,
                 usedGeminiApi = true,
-                statusNote = if (located.isEmpty()) "Gemini AI: No mistakes found" else "Gemini AI found ${located.size} fix(es)"
+                statusNote = if (located.isEmpty()) "TypeGenius AI: No mistakes found" else "TypeGenius AI found ${located.size} fix(es)"
             )
         }
     }
 
     private suspend fun runGeminiRewrite(
         text: String,
-        action: GemTypeAction,
+        action: TypeGeniusAiAction,
         languageId: LanguageId,
         apiKey: String,
         avoid: List<String>
-    ): Result<GemTypeResult> {
+    ): Result<TypeGeniusAiResult> {
         val targetName = when {
             languageId.code.startsWith("bn") || languageId == LanguageId.SYLHETI -> "Bangla"
             languageId.code.startsWith("hi") -> "Hindi"
@@ -204,19 +204,19 @@ object GemTypeAiEngine {
             1 -> " Write a noticeably different version from: ${avoid.first()}."
             else -> " Write a different version from all of these: ${avoid.joinToString(" | ")}."
         }
-        val useLayered = (action == GemTypeAction.ENGLISH || action == GemTypeAction.NATIVE) &&
+        val useLayered = (action == TypeGeniusAiAction.ENGLISH || action == TypeGeniusAiAction.NATIVE) &&
             text.any { it in 'a'..'z' || it in 'A'..'Z' } &&
             targetName != "English"
 
         val taskPrompt = when (action) {
-            GemTypeAction.FIX -> "Fix grammar, spelling, and punctuation with minimal edits. Preserve words, tone, and language. $NATURAL_RULES"
-            GemTypeAction.IMPROVE -> "Make the text clearer and more natural at a similar length. Keep tone and language. $NATURAL_RULES"
-            GemTypeAction.SHORTEN -> "Make the text concise and direct while keeping every key point and tone. $NATURAL_RULES"
-            GemTypeAction.FORMAL -> "Rewrite in a polite, professional tone suited for work messages/emails. $NATURAL_RULES"
-            GemTypeAction.CASUAL -> "Rewrite in a friendly, relaxed everyday chat tone. $NATURAL_RULES"
-            GemTypeAction.NATIVE -> "If romanized ($targetName typed in English letters like Banglish/Hinglish), convert to correct, natural $targetName script with proper spelling and punctuation (Bangla short forms like tmr=তোমার, k=কে, vai=ভাই). $NATURAL_RULES"
-            GemTypeAction.ENGLISH -> "Understand the message (including Banglish/Hinglish/short forms like tmr=your) and express it as fluent, natural English keeping the writer's meaning and tone."
-            GemTypeAction.CHECK -> ""
+            TypeGeniusAiAction.FIX -> "Fix grammar, spelling, and punctuation with minimal edits. Preserve words, tone, and language. $NATURAL_RULES"
+            TypeGeniusAiAction.IMPROVE -> "Make the text clearer and more natural at a similar length. Keep tone and language. $NATURAL_RULES"
+            TypeGeniusAiAction.SHORTEN -> "Make the text concise and direct while keeping every key point and tone. $NATURAL_RULES"
+            TypeGeniusAiAction.FORMAL -> "Rewrite in a polite, professional tone suited for work messages/emails. $NATURAL_RULES"
+            TypeGeniusAiAction.CASUAL -> "Rewrite in a friendly, relaxed everyday chat tone. $NATURAL_RULES"
+            TypeGeniusAiAction.NATIVE -> "If romanized ($targetName typed in English letters like Banglish/Hinglish), convert to correct, natural $targetName script with proper spelling and punctuation (Bangla short forms like tmr=তোমার, k=কে, vai=ভাই). $NATURAL_RULES"
+            TypeGeniusAiAction.ENGLISH -> "Understand the message (including Banglish/Hinglish/short forms like tmr=your) and express it as fluent, natural English keeping the writer's meaning and tone."
+            TypeGeniusAiAction.CHECK -> ""
         }
 
         val systemInstruction = if (useLayered) {
@@ -228,7 +228,7 @@ object GemTypeAiEngine {
 
         val temp = when {
             avoid.isNotEmpty() -> 0.85
-            action == GemTypeAction.FIX || action == GemTypeAction.NATIVE -> 0.05
+            action == TypeGeniusAiAction.FIX || action == TypeGeniusAiAction.NATIVE -> 0.05
             else -> 0.4
         }
 
@@ -242,18 +242,18 @@ object GemTypeAiEngine {
         return res.map { json ->
             val rewritten = json.optString("rewritten", text).trim().ifBlank { text }
             val nativeReadAs = if (useLayered) json.optString("native").trim().ifBlank { null } else null
-            GemTypeResult(
+            TypeGeniusAiResult(
                 action = action,
                 originalText = text,
                 rewrittenText = rewritten,
                 nativeReadAs = nativeReadAs,
                 usedGeminiApi = true,
-                statusNote = "Gemini AI • ${action.resultLabel}"
+                statusNote = "TypeGenius AI • ${action.resultLabel}"
             )
         }
     }
 
-    fun applyCorrections(text: String, corrections: List<GemTypeCorrection>): String {
+    fun applyCorrections(text: String, corrections: List<TypeGeniusAiCorrection>): String {
         val out = StringBuilder(text)
         var limit = text.length
         for (c in corrections.sortedByDescending { it.start }) {
@@ -265,8 +265,8 @@ object GemTypeAiEngine {
         return out.toString()
     }
 
-    private fun locateCorrections(text: String, array: JSONArray): List<GemTypeCorrection> {
-        val list = mutableListOf<GemTypeCorrection>()
+    private fun locateCorrections(text: String, array: JSONArray): List<TypeGeniusAiCorrection> {
+        val list = mutableListOf<TypeGeniusAiCorrection>()
         var searchFrom = 0
         for (i in 0 until array.length()) {
             val obj = array.optJSONObject(i) ?: continue
@@ -279,7 +279,7 @@ object GemTypeAiEngine {
             if (pos < 0) pos = text.indexOf(orig)
             if (pos >= 0) {
                 list.add(
-                    GemTypeCorrection(
+                    TypeGeniusAiCorrection(
                         original = orig,
                         replacement = repl,
                         explanation = exp.ifBlank { "Suggested fix" },
@@ -296,15 +296,15 @@ object GemTypeAiEngine {
 
     private fun runLocalFallback(
         text: String,
-        action: GemTypeAction,
+        action: TypeGeniusAiAction,
         languageId: LanguageId,
         note: String
-    ): GemTypeResult {
+    ): TypeGeniusAiResult {
         return when (action) {
-            GemTypeAction.CHECK -> {
+            TypeGeniusAiAction.CHECK -> {
                 val corrections = collectLocalCorrections(text, languageId)
                 val fixed = applyCorrections(text, corrections)
-                GemTypeResult(
+                TypeGeniusAiResult(
                     action = action,
                     originalText = text,
                     rewrittenText = fixed,
@@ -313,10 +313,10 @@ object GemTypeAiEngine {
                     statusNote = if (corrections.isEmpty()) "On-Device Check: Looks clean" else "On-Device Check: ${corrections.size} fix(es)"
                 )
             }
-            GemTypeAction.FIX, GemTypeAction.IMPROVE -> {
+            TypeGeniusAiAction.FIX, TypeGeniusAiAction.IMPROVE -> {
                 val corrections = collectLocalCorrections(text, languageId)
                 val fixed = applyCorrections(text, corrections).replace(Regex("\\s{2,}"), " ").trim()
-                GemTypeResult(
+                TypeGeniusAiResult(
                     action = action,
                     originalText = text,
                     rewrittenText = fixed.ifBlank { text },
@@ -324,15 +324,15 @@ object GemTypeAiEngine {
                     statusNote = note
                 )
             }
-            GemTypeAction.SHORTEN -> {
+            TypeGeniusAiAction.SHORTEN -> {
                 val fillers = setOf("basically", "actually", "literally", "really", "just", "very", "quite", "kind of", "sort of")
                 val shortened = text.split(Regex("\\s+"))
                     .filterNot { it.lowercase().trim(',', '.', '!') in fillers }
                     .joinToString(" ")
                     .ifBlank { text }
-                GemTypeResult(action, text, shortened, usedGeminiApi = false, statusNote = note)
+                TypeGeniusAiResult(action, text, shortened, usedGeminiApi = false, statusNote = note)
             }
-            GemTypeAction.FORMAL -> {
+            TypeGeniusAiAction.FORMAL -> {
                 val formalMap = listOf(
                     Regex("\\bi'm\\b", RegexOption.IGNORE_CASE) to "I am",
                     Regex("\\bdon't\\b", RegexOption.IGNORE_CASE) to "do not",
@@ -347,9 +347,9 @@ object GemTypeAiEngine {
                 )
                 var result = applyCorrections(text, collectLocalCorrections(text, languageId))
                 formalMap.forEach { (rx, rep) -> result = rx.replace(result, rep) }
-                GemTypeResult(action, text, result, usedGeminiApi = false, statusNote = note)
+                TypeGeniusAiResult(action, text, result, usedGeminiApi = false, statusNote = note)
             }
-            GemTypeAction.CASUAL -> {
+            TypeGeniusAiAction.CASUAL -> {
                 val casualMap = listOf(
                     Regex("\\bI am\\b") to "I'm",
                     Regex("\\bdo not\\b", RegexOption.IGNORE_CASE) to "don't",
@@ -362,11 +362,11 @@ object GemTypeAiEngine {
                 )
                 var result = text
                 casualMap.forEach { (rx, rep) -> result = rx.replace(result, rep) }
-                GemTypeResult(action, text, result, usedGeminiApi = false, statusNote = note)
+                TypeGeniusAiResult(action, text, result, usedGeminiApi = false, statusNote = note)
             }
-            GemTypeAction.NATIVE -> {
+            TypeGeniusAiAction.NATIVE -> {
                 val nativeText = BengaliPhoneticParser.transliterateSentenceToBengali(text)
-                GemTypeResult(
+                TypeGeniusAiResult(
                     action = action,
                     originalText = text,
                     rewrittenText = nativeText,
@@ -374,11 +374,11 @@ object GemTypeAiEngine {
                     statusNote = note
                 )
             }
-            GemTypeAction.ENGLISH -> {
+            TypeGeniusAiAction.ENGLISH -> {
                 val src = if (text.any { it.code in 0x0980..0x09FF }) "bn" else "banglish"
                 val nativeReadAs = if (src == "banglish") BengaliPhoneticParser.transliterateSentenceToBengali(text) else null
                 val translated = OfflineTranslator.translate(text, src, "en").translatedText
-                GemTypeResult(
+                TypeGeniusAiResult(
                     action = action,
                     originalText = text,
                     rewrittenText = translated.ifBlank { text },
@@ -393,8 +393,8 @@ object GemTypeAiEngine {
     /**
      * Collects multiple non-overlapping local grammar/spelling/punctuation fixes across a sentence.
      */
-    fun collectLocalCorrections(text: String, languageId: LanguageId): List<GemTypeCorrection> {
-        val corrections = mutableListOf<GemTypeCorrection>()
+    fun collectLocalCorrections(text: String, languageId: LanguageId): List<TypeGeniusAiCorrection> {
+        val corrections = mutableListOf<TypeGeniusAiCorrection>()
         // Scan word-by-word sliding prefix slices using OfflineGrammarEngine + OfflineSpellChecker
         val tokenRegex = Regex("\\S+")
         val matches = tokenRegex.findAll(text).toList()
@@ -417,7 +417,7 @@ object GemTypeAiEngine {
                         else -> CorrectionCategory.GRAMMAR
                     }
                     corrections.add(
-                        GemTypeCorrection(
+                        TypeGeniusAiCorrection(
                             original = origSpan,
                             replacement = fix.correctedPhrase,
                             explanation = fix.reason,
@@ -440,7 +440,7 @@ object GemTypeAiEngine {
                 val start = match.range.first + innerOffset
                 val end = start + cleanWord.length
                 corrections.add(
-                    GemTypeCorrection(
+                    TypeGeniusAiCorrection(
                         original = cleanWord,
                         replacement = direct,
                         explanation = "Spelling fix",

@@ -398,7 +398,7 @@ fun MoreToolsPanel(
         ),
         ToolTile(
             id = KeyboardToolId.GEMINI_AI,
-            label = "GemType AI",
+            label = "TypeGenius AI",
             icon = Icons.Default.AutoAwesome,
             badgeCount = liveGrammarIssueCount,
             testTag = "tool_gemini_ai",

@@ -685,7 +685,7 @@ fun KeyboardView(
                 }
 
                 KeyboardViewMode.GEMINI_AI -> {
-                    GemTypeAiPanel(
+                    TypeGeniusAiPanel(
                         colors = colors,
                         activeLanguage = activeLanguage,
                         geminiApiKey = geminiApiKey,

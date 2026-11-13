@@ -50,15 +50,15 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ai.CorrectionCategory
-import com.example.data.ai.GemTypeAction
-import com.example.data.ai.GemTypeAiEngine
-import com.example.data.ai.GemTypeCorrection
-import com.example.data.ai.GemTypeResult
+import com.example.data.ai.TypeGeniusAiAction
+import com.example.data.ai.TypeGeniusAiEngine
+import com.example.data.ai.TypeGeniusAiCorrection
+import com.example.data.ai.TypeGeniusAiResult
 import com.example.model.LanguageId
 import kotlinx.coroutines.launch
 
 @Composable
-fun GemTypeAiPanel(
+fun TypeGeniusAiPanel(
     colors: KeyboardColors,
     activeLanguage: LanguageId,
     geminiApiKey: String,
@@ -73,14 +73,14 @@ fun GemTypeAiPanel(
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
-    var selectedAction by remember { mutableStateOf(GemTypeAction.CHECK) }
+    var selectedAction by remember { mutableStateOf(TypeGeniusAiAction.CHECK) }
     var currentSource by remember(sourceText) { mutableStateOf(sourceText) }
-    var result by remember { mutableStateOf<GemTypeResult?>(null) }
+    var result by remember { mutableStateOf<TypeGeniusAiResult?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val skippedIndices = remember { mutableStateListOf<Int>() }
     val previousVariations = remember { mutableStateListOf<String>() }
 
-    fun execute(action: GemTypeAction, isVariation: Boolean = false) {
+    fun execute(action: TypeGeniusAiAction, isVariation: Boolean = false) {
         val latest = onRefreshSourceText().ifBlank { currentSource }
         currentSource = latest
         if (!isVariation) {
@@ -94,7 +94,7 @@ fun GemTypeAiPanel(
         skippedIndices.clear()
         isLoading = true
         scope.launch {
-            result = GemTypeAiEngine.runAction(
+            result = TypeGeniusAiEngine.runAction(
                 text = latest,
                 action = action,
                 activeLanguage = activeLanguage,
@@ -106,7 +106,7 @@ fun GemTypeAiPanel(
     }
 
     LaunchedEffect(Unit) {
-        execute(GemTypeAction.CHECK)
+        execute(TypeGeniusAiAction.CHECK)
     }
 
     Column(
@@ -135,14 +135,14 @@ fun GemTypeAiPanel(
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "GemType AI",
+                        contentDescription = "TypeGenius AI",
                         tint = colors.accent,
                         modifier = Modifier.size(16.dp)
                     )
                 }
                 Column {
                     Text(
-                        text = if (geminiApiKey.isNotBlank()) "GemType Gemini AI" else "GemType Smart Proofread",
+                        text = if (geminiApiKey.isNotBlank()) "TypeGenius Gemini AI" else "TypeGenius Smart Proofread",
                         color = colors.textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -169,7 +169,7 @@ fun GemTypeAiPanel(
                                 onUndo()
                             }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .testTag("gemtype_undo_button")
+                            .testTag("typegenius_undo_button")
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -201,11 +201,11 @@ fun GemTypeAiPanel(
 
                 IconButton(
                     onClick = { onHaptic(); onClose() },
-                    modifier = Modifier.size(30.dp).testTag("gemtype_close_button")
+                    modifier = Modifier.size(30.dp).testTag("typegenius_close_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close GemType AI",
+                        contentDescription = "Close TypeGenius AI",
                         tint = colors.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -220,7 +220,7 @@ fun GemTypeAiPanel(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            GemTypeAction.entries.forEach { action ->
+            TypeGeniusAiAction.entries.forEach { action ->
                 val isSelected = selectedAction == action
                 Box(
                     modifier = Modifier
@@ -231,7 +231,7 @@ fun GemTypeAiPanel(
                             execute(action)
                         }
                         .padding(horizontal = 11.dp, vertical = 6.dp)
-                        .testTag("gemtype_action_${action.name.lowercase()}")
+                        .testTag("typegenius_action_${action.name.lowercase()}")
                 ) {
                     Text(
                         text = action.label,
@@ -292,7 +292,7 @@ fun GemTypeAiPanel(
                     }
                 }
 
-                selectedAction == GemTypeAction.CHECK -> {
+                selectedAction == TypeGeniusAiAction.CHECK -> {
                     val corrections = result?.corrections.orEmpty()
                     if (corrections.isEmpty()) {
                         Column(
@@ -354,7 +354,7 @@ fun GemTypeAiPanel(
                                         .background(colors.keySpecialBackground)
                                         .clickable {
                                             onHaptic()
-                                            execute(GemTypeAction.CHECK)
+                                            execute(TypeGeniusAiAction.CHECK)
                                         }
                                         .padding(vertical = 8.dp),
                                     contentAlignment = Alignment.Center
@@ -368,13 +368,13 @@ fun GemTypeAiPanel(
                                         .background(if (activeList.isNotEmpty()) colors.accent else colors.keySpecialBackground)
                                         .clickable(enabled = activeList.isNotEmpty()) {
                                             onHaptic()
-                                            val patched = GemTypeAiEngine.applyCorrections(currentSource, activeList)
+                                            val patched = TypeGeniusAiEngine.applyCorrections(currentSource, activeList)
                                             onApplyText(patched)
                                             currentSource = patched
-                                            execute(GemTypeAction.CHECK)
+                                            execute(TypeGeniusAiAction.CHECK)
                                         }
                                         .padding(vertical = 8.dp)
-                                        .testTag("gemtype_apply_fixes_button"),
+                                        .testTag("typegenius_apply_fixes_button"),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -436,7 +436,7 @@ fun GemTypeAiPanel(
                                         execute(selectedAction, isVariation = true)
                                     }
                                     .padding(vertical = 8.dp)
-                                    .testTag("gemtype_try_another_button"),
+                                    .testTag("typegenius_try_another_button"),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(
@@ -458,7 +458,7 @@ fun GemTypeAiPanel(
                                         currentSource = rewritten
                                     }
                                     .padding(vertical = 8.dp)
-                                    .testTag("gemtype_replace_button"),
+                                    .testTag("typegenius_replace_button"),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("Replace", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -473,7 +473,7 @@ fun GemTypeAiPanel(
 
 @Composable
 private fun CorrectionCard(
-    correction: GemTypeCorrection,
+    correction: TypeGeniusAiCorrection,
     isKept: Boolean,
     colors: KeyboardColors,
     onToggleKeep: () -> Unit

@@ -143,7 +143,7 @@ enum class KeyboardToolId(
     val testTag: String
 ) {
     TEXT_EDITING("text_editing", "Text edit", "toolbox_text_editing"),
-    GEMINI_AI("gemini_ai", "GemType AI", "toolbox_gemini"),
+    GEMINI_AI("gemini_ai", "TypeGenius AI", "toolbox_gemini"),
     EMOJI("emoji", "Emoji", "toolbox_emoji"),
     CLIPBOARD("clipboard", "Clipboard", "toolbox_clipboard"),
     TRANSLATOR("translator", "Translate", "toolbox_translator"),
