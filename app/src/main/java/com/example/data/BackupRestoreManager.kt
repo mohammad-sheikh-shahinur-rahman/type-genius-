@@ -145,6 +145,8 @@ object BackupRestoreManager {
             put("spacebarCursorScrubEnabled", settings.spacebarCursorScrubEnabled.first())
             put("avroJuktakkhorBarEnabled", settings.avroJuktakkhorBarEnabled.first())
             put("handwritingSignature", settings.handwritingSignature.first())
+            put("autofillProfileJson", settings.autofillProfileJson.first())
+            put("quickTodoJson", settings.quickTodoJson.first())
             put("toolbarTools", JSONArray(toolbarTools.map { it.id }))
         }
         root.put("preferences", prefsObj)
@@ -382,6 +384,26 @@ object BackupRestoreManager {
             if (prefs.has("handwritingSignature")) {
                 settings.setHandwritingSignature(prefs.optString("handwritingSignature", ""))
                 settingsCount++
+            }
+            if (prefs.has("autofillProfileJson")) {
+                val rawAutofill = prefs.optString("autofillProfileJson", "")
+                if (rawAutofill.isNotBlank()) {
+                    val existing = settings.autofillProfile.first().toMutableMap()
+                    val imported = com.example.data.dictionary.ProductivityTextTools.parseAutofillProfile(rawAutofill)
+                    imported.forEach { (k, v) -> if (v.isNotBlank()) existing[k] = v }
+                    settings.setAutofillProfileMap(existing)
+                    settingsCount++
+                }
+            }
+            if (prefs.has("quickTodoJson")) {
+                val rawTodos = prefs.optString("quickTodoJson", "")
+                if (rawTodos.isNotBlank()) {
+                    val existing = settings.quickTodoItems.first()
+                    val imported = com.example.data.dictionary.ProductivityTextTools.parseTodoItems(rawTodos)
+                    val merged = (imported + existing).distinctBy { it.text.lowercase() }.take(40)
+                    settings.setQuickTodoItems(merged)
+                    settingsCount++
+                }
             }
             prefs.optJSONArray("toolbarTools")?.let { arr ->
                 val list = buildList {

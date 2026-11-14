@@ -1561,6 +1561,7 @@ fun GeneralSettingsScreen(
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TypingPreferencesCard()
+                        AutofillProfileVaultCard(settingsManager = settingsManager)
                         OfflineBackupRestoreCard(settingsManager = settingsManager)
                         PersonalDictionaryCard()
                         PersonalShortcutsCard()
@@ -1573,6 +1574,7 @@ fun GeneralSettingsScreen(
                 PhotoBackgroundThemeCard(settingsManager = settingsManager)
                 TypingPreferencesCard()
                 SmartAutomationAndPrivacyCard(settingsManager = settingsManager)
+                AutofillProfileVaultCard(settingsManager = settingsManager)
                 OfflineBackupRestoreCard(settingsManager = settingsManager)
                 ToolbarCustomizerCard(settingsManager = settingsManager)
                 PersonalDictionaryCard()

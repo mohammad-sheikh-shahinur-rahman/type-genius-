@@ -83,11 +83,15 @@ class SettingsManager(private val context: Context) {
         val KEY_SPACEBAR_CURSOR_SCRUB = booleanPreferencesKey("spacebar_cursor_scrub_enabled")
         val KEY_AVRO_JUKTAKKHOR_BAR = booleanPreferencesKey("avro_juktakkhor_bar_enabled")
         val KEY_HANDWRITING_SIGNATURE = stringPreferencesKey("handwriting_signature")
+        val KEY_AUTOFILL_PROFILE_JSON = stringPreferencesKey("autofill_profile_json")
+        val KEY_QUICK_TODO_JSON = stringPreferencesKey("quick_todo_json")
+        val KEY_TASBIH_COUNT = intPreferencesKey("islamic_tasbih_count")
+        val KEY_TASBIH_DHIKR_INDEX = intPreferencesKey("islamic_tasbih_dhikr_idx")
 
         val DEFAULT_USER_TEMPLATES: List<String> = listOf(
             "আসসালামু আলাইকুম, কেমন আছেন?",
             "ধন্যবাদ, কিছুক্ষণ পর যোগাযোগ করছি।",
-            "আফনে বালা আছইননি? সব ঠিকঠাক নি?",
+            "আগামী {বার} ({তারিখ}) {সময়}-এ কথা হবে।",
             "Thanks! I will get back to you shortly."
         )
 
@@ -613,6 +617,127 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setHandwritingSignature(signature: String) {
         context.dataStore.edit { it[KEY_HANDWRITING_SIGNATURE] = signature.trim().take(48) }
+    }
+
+    val autofillProfileJson: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AUTOFILL_PROFILE_JSON] ?: ""
+    }
+
+    val autofillProfile: Flow<Map<String, String>> = autofillProfileJson.map { raw ->
+        com.example.data.dictionary.ProductivityTextTools.parseAutofillProfile(raw)
+    }
+
+    suspend fun updateAutofillField(key: String, value: String) {
+        val cleanKey = key.trim()
+        if (cleanKey.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val current = com.example.data.dictionary.ProductivityTextTools
+                .parseAutofillProfile(prefs[KEY_AUTOFILL_PROFILE_JSON].orEmpty())
+                .toMutableMap()
+            val cleanVal = value.trim()
+            if (cleanVal.isEmpty()) {
+                current.remove(cleanKey)
+            } else {
+                current[cleanKey] = cleanVal
+            }
+            prefs[KEY_AUTOFILL_PROFILE_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeAutofillProfile(current)
+        }
+    }
+
+    suspend fun setAutofillProfileMap(map: Map<String, String>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_AUTOFILL_PROFILE_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeAutofillProfile(map)
+        }
+    }
+
+    val quickTodoJson: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_QUICK_TODO_JSON] ?: ""
+    }
+
+    val quickTodoItems: Flow<List<com.example.data.dictionary.QuickTodoItem>> = quickTodoJson.map { raw ->
+        com.example.data.dictionary.ProductivityTextTools.parseTodoItems(raw)
+    }
+
+    suspend fun addQuickTodo(text: String) {
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val current = com.example.data.dictionary.ProductivityTextTools
+                .parseTodoItems(prefs[KEY_QUICK_TODO_JSON].orEmpty())
+            val newItem = com.example.data.dictionary.QuickTodoItem(text = clean)
+            val updated = (listOf(newItem) + current).take(40)
+            prefs[KEY_QUICK_TODO_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeTodoItems(updated)
+        }
+    }
+
+    suspend fun toggleQuickTodo(id: String) {
+        context.dataStore.edit { prefs ->
+            val current = com.example.data.dictionary.ProductivityTextTools
+                .parseTodoItems(prefs[KEY_QUICK_TODO_JSON].orEmpty())
+            val updated = current.map { if (it.id == id) it.copy(done = !it.done) else it }
+            prefs[KEY_QUICK_TODO_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeTodoItems(updated)
+        }
+    }
+
+    suspend fun deleteQuickTodo(id: String) {
+        context.dataStore.edit { prefs ->
+            val current = com.example.data.dictionary.ProductivityTextTools
+                .parseTodoItems(prefs[KEY_QUICK_TODO_JSON].orEmpty())
+            val updated = current.filterNot { it.id == id }
+            prefs[KEY_QUICK_TODO_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeTodoItems(updated)
+        }
+    }
+
+    suspend fun clearCompletedTodos() {
+        context.dataStore.edit { prefs ->
+            val current = com.example.data.dictionary.ProductivityTextTools
+                .parseTodoItems(prefs[KEY_QUICK_TODO_JSON].orEmpty())
+            val updated = current.filterNot { it.done }
+            prefs[KEY_QUICK_TODO_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeTodoItems(updated)
+        }
+    }
+
+    suspend fun setQuickTodoItems(items: List<com.example.data.dictionary.QuickTodoItem>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_QUICK_TODO_JSON] =
+                com.example.data.dictionary.ProductivityTextTools.serializeTodoItems(items)
+        }
+    }
+
+    val tasbihCount: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_TASBIH_COUNT] ?: 0).coerceAtLeast(0)
+    }
+
+    val tasbihDhikrIndex: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_TASBIH_DHIKR_INDEX] ?: 0).coerceAtLeast(0)
+    }
+
+    suspend fun incrementTasbih() {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[KEY_TASBIH_COUNT] ?: 0).coerceAtLeast(0)
+            prefs[KEY_TASBIH_COUNT] = current + 1
+        }
+    }
+
+    suspend fun resetTasbih() {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_TASBIH_COUNT] = 0
+        }
+    }
+
+    suspend fun cycleTasbihDhikr(presetCount: Int) {
+        if (presetCount <= 0) return
+        context.dataStore.edit { prefs ->
+            val current = (prefs[KEY_TASBIH_DHIKR_INDEX] ?: 0).coerceAtLeast(0)
+            prefs[KEY_TASBIH_DHIKR_INDEX] = (current + 1) % presetCount
+            prefs[KEY_TASBIH_COUNT] = 0
+        }
     }
 
     fun resolveSmartLanguageForPackage(

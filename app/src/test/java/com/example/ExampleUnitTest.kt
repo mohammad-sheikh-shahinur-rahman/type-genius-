@@ -11,6 +11,8 @@ import com.example.data.dictionary.OfflineGlideEngine
 import com.example.data.dictionary.OfflineGrammarEngine
 import com.example.data.dictionary.OfflineMathEvaluator
 import com.example.data.dictionary.OfflineSpellChecker
+import com.example.data.dictionary.ProductivityTextTools
+import com.example.data.dictionary.TextTransformMode
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.SmartClipType
 import com.example.data.local.SmartClipboardParser
@@ -822,5 +824,66 @@ class ExampleUnitTest {
 
         assertTrue(com.example.service.OfflineVoicePostProcessor.isDuplicateEcho("Hello world", "hello world", 1200L))
         assertFalse(com.example.service.OfflineVoicePostProcessor.isDuplicateEcho("Hello world", "hello world", 4000L))
+    }
+
+    @Test
+    fun testProductivityTextTools_transformsInlineConversionsDynamicTemplatesAndLists() {
+        // 1. Text transformations
+        assertEquals("HELLO WORLD", ProductivityTextTools.transformText("hello world", TextTransformMode.UPPER))
+        assertEquals("hello world", ProductivityTextTools.transformText("HELLO WORLD", TextTransformMode.LOWER))
+        assertEquals("Type Genius", ProductivityTextTools.transformText("type genius", TextTransformMode.TITLE))
+        assertEquals("type_genius_app", ProductivityTextTools.transformText("typeGeniusApp", TextTransformMode.SNAKE))
+        assertEquals("typeGeniusApp", ProductivityTextTools.transformText("type_genius_app", TextTransformMode.CAMEL))
+        assertEquals("২০২৬", ProductivityTextTools.transformText("2026", TextTransformMode.TO_BENGALI_DIGITS))
+        assertEquals("2026", ProductivityTextTools.transformText("২০২৬", TextTransformMode.TO_ENGLISH_DIGITS))
+        assertEquals("1,50,000৳", ProductivityTextTools.transformText("150000৳", TextTransformMode.SOUTH_ASIAN_COMMA))
+        assertEquals("১,৫০,০০০", ProductivityTextTools.transformText("১৫০০০০", TextTransformMode.SOUTH_ASIAN_COMMA))
+
+        // 2. Inline currency & unit conversions (no '=' needed)
+        val usdConv = ProductivityTextTools.evaluateInlineUnitOrCurrency("$50")
+        assertEquals("6,050৳", usdConv?.resultString)
+        val bdtConv = ProductivityTextTools.evaluateInlineUnitOrCurrency("1210৳")
+        assertEquals("$10", bdtConv?.resultString)
+        val kmConv = ProductivityTextTools.evaluateInlineUnitOrCurrency("10km")
+        assertEquals("6.21 mi", kmConv?.resultString)
+        val tempConv = ProductivityTextTools.evaluateInlineUnitOrCurrency("38°C")
+        assertEquals("100.4 °F", tempConv?.resultString)
+        val bnKgConv = ProductivityTextTools.evaluateInlineUnitOrCurrency("১০kg")
+        assertTrue(bnKgConv?.resultString?.contains("lb") == true)
+
+        // 3. Numbered list continuation
+        assertEquals("\n৩. ", ProductivityTextTools.nextNumberedLinePrefix("১. কাজ এক\n২. কাজ দুই", bengaliDigits = true))
+        assertEquals("\n2. ", ProductivityTextTools.nextNumberedLinePrefix("1. First item", bengaliDigits = false))
+        assertEquals("১. ", ProductivityTextTools.nextNumberedLinePrefix("", bengaliDigits = true))
+
+        // 4. Dynamic template variables
+        val resolved = ProductivityTextTools.resolveTemplateVariables(
+            template = "আজ {বার}, তারিখ {তারিখ}, বাংলা {বাংলা_তারিখ}, সময় {সময়}, ক্লিপ: {ক্লিপ}",
+            clipboardLatest = "TXN-9981"
+        )
+        assertFalse(resolved.contains("{বার}"))
+        assertFalse(resolved.contains("{তারিখ}"))
+        assertFalse(resolved.contains("{বাংলা_তারিখ}"))
+        assertFalse(resolved.contains("{সময়}"))
+        assertTrue(resolved.endsWith("TXN-9981"))
+    }
+
+    @Test
+    fun testIslamicToolkit_hijriCalendarTriggersAndDynamicTag() {
+        val hijri = com.example.data.IslamicToolkit.toHijriDate(java.util.Date())
+        assertTrue(hijri.year >= 1445)
+        assertTrue(hijri.day in 1..30)
+        assertTrue(hijri.formattedBn.contains("হিজরি"))
+
+        val withHijri = ProductivityTextTools.resolveTemplateVariables("আজ হিজরি: {হিজরি}")
+        assertFalse(withHijri.contains("{হিজরি}"))
+        assertTrue(withHijri.contains("হিজরি"))
+
+        val sawSugg = com.example.data.IslamicToolkit.matchQuickIslamicSuggestions("saw")
+        assertTrue(sawSugg.contains("ﷺ"))
+        val bsmSugg = com.example.data.IslamicToolkit.matchQuickIslamicSuggestions("bsm")
+        assertTrue(bsmSugg.contains("﷽"))
+        val jzkSugg = com.example.data.IslamicToolkit.matchQuickIslamicSuggestions("jzk")
+        assertTrue(jzkSugg.any { it.contains("জাযাকাল্লাহু") })
     }
 }

@@ -19,10 +19,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -401,6 +403,99 @@ fun SmartAutomationAndPrivacyCard(settingsManager: SettingsManager) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AutofillProfileVaultCard(settingsManager: SettingsManager) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val savedProfile by settingsManager.autofillProfile.collectAsState(initial = emptyMap())
+    var drafts by remember(savedProfile) {
+        mutableStateOf(
+            com.example.data.dictionary.ProductivityTextTools.autofillSchema.associate {
+                it.key to savedProfile[it.key].orEmpty()
+            }
+        )
+    }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("autofill_profile_vault_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Badge, contentDescription = null, tint = TGMagenta)
+                    Column {
+                        Text(
+                            text = "অটো-ফিল প্রোফাইল ভল্ট",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "নাম, ফোন, ইমেইল, ঠিকানা ও বিকাশ — কীবোর্ড থেকে ১-ট্যাপেই বসান",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(TGMagenta.copy(alpha = 0.14f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("১-ট্যাপ ভল্ট", color = TGMagenta, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            com.example.data.dictionary.ProductivityTextTools.autofillSchema.forEach { schema ->
+                OutlinedTextField(
+                    value = drafts[schema.key].orEmpty(),
+                    onValueChange = { updated ->
+                        drafts = drafts.toMutableMap().apply { put(schema.key, updated) }
+                    },
+                    label = { Text(schema.label, fontSize = 12.sp) },
+                    placeholder = { Text(schema.placeholder, fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_autofill_${schema.key}")
+                )
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        settingsManager.setAutofillProfileMap(drafts)
+                        Toast.makeText(context, "অটো-ফিল প্রোফাইল সেভ হয়েছে!", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = TGMagenta),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .testTag("save_autofill_profile_button")
+            ) {
+                Text("অটো-ফিল প্রোফাইল সেভ করুন", fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -47,6 +47,8 @@ import com.example.data.dictionary.GrammarSuggestion
 import com.example.data.dictionary.OfflineGlideEngine
 import com.example.data.dictionary.OfflineGrammarEngine
 import com.example.data.dictionary.OfflineMathEvaluator
+import com.example.data.dictionary.ProductivityTextTools
+import com.example.data.dictionary.TextTransformMode
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.ClipboardItem
 import com.example.data.local.SmartClipInfo
@@ -129,6 +131,7 @@ class TypeGeniusIME : InputMethodService(),
     private var customFontNameCache by mutableStateOf("")
     private var lastTypedWordPreview by mutableStateOf("")
     private var lastDeletedUndoText by mutableStateOf("")
+    private var lastDeletedWordCount by mutableIntStateOf(0)
     private var lastGlideCommittedWord by mutableStateOf("")
     private var activeGrammarSuggestions: Map<String, GrammarSuggestion> = emptyMap()
     private var liveGrammarIssueCount by mutableIntStateOf(0)
@@ -152,6 +155,7 @@ class TypeGeniusIME : InputMethodService(),
     private var isSensitiveLockedField = false
     private var isAutoFieldIncognito by mutableStateOf(false)
     private var handwritingSignatureCache by mutableStateOf("")
+    private var latestClipboardCache by mutableStateOf("")
 
     private fun isPrivacyPaused(): Boolean = isIncognitoEnabled || isAutoFieldIncognito
 
@@ -159,6 +163,15 @@ class TypeGeniusIME : InputMethodService(),
     private var clipboardSearchQuery by mutableStateOf("")
     private var gifSearchQuery by mutableStateOf("")
     private var customStickerText by mutableStateOf("অস্থির হইছে বস!")
+    private var todoDraftInput by mutableStateOf("")
+    private var autofillEditingKey by mutableStateOf("")
+    private var autofillDraftValue by mutableStateOf("")
+    private var notepadLiveDraft by mutableStateOf("")
+
+    private var pomodoroRemainingSec by mutableIntStateOf(25 * 60)
+    private var pomodoroIsBreak by mutableStateOf(false)
+    private var pomodoroRunning by mutableStateOf(false)
+    private var pomodoroJob: kotlinx.coroutines.Job? = null
 
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
 
@@ -192,6 +205,7 @@ class TypeGeniusIME : InputMethodService(),
             launch { settingsManager.customFontPath.collect { customFontPathCache = it } }
             launch { settingsManager.customFontName.collect { customFontNameCache = it } }
             launch { settingsManager.handwritingSignature.collect { handwritingSignatureCache = it } }
+            launch { settingsManager.notepadDraft.collect { notepadLiveDraft = it } }
             launch { settingsManager.otpAutoExpireMinutes.collect { otpAutoExpireMinutes = it } }
             launch { settingsManager.perAppSmartLanguageEnabled.collect { perAppSmartLanguageEnabled = it } }
             launch { settingsManager.perAppLanguageMap.collect { perAppLanguageMap = it } }
@@ -296,6 +310,7 @@ class TypeGeniusIME : InputMethodService(),
             setContent {
                 val clipboardFlow = database.clipboardDao().getAllItems()
                 val clipItems by clipboardFlow.collectAsState(initial = emptyList())
+                latestClipboardCache = clipItems.firstOrNull()?.content.orEmpty()
 
                 KeyboardView(
                     activeLanguage = activeLanguage,
@@ -314,6 +329,7 @@ class TypeGeniusIME : InputMethodService(),
                     activeFancyStyle = activeFancyStyle,
                     lastTypedWordPreview = lastTypedWordPreview,
                     canUndoDelete = lastDeletedUndoText.isNotEmpty(),
+                    undoDeletedWordCount = lastDeletedWordCount,
                     isAutoIncognitoActive = isAutoFieldIncognito,
                     onOpenTranslator = { openTranslator() },
                     onCloseTranslator = { closeTranslator() },
@@ -409,6 +425,8 @@ class TypeGeniusIME : InputMethodService(),
                     onPaste = { performSmartPaste() },
                     onDeleteWordBackward = { deleteWordBackward() },
                     onUndoDelete = { undoLastDeletedWord() },
+                    onTransformText = { mode -> transformEditorText(mode) },
+                    onInsertNumberedList = { bnDigits -> insertNumberedListPrefix(bnDigits) },
                     onGlideCommitted = { trail, keyCenters -> handleGlideSwipe(trail, keyCenters) },
                     onSelectFancyStyle = { style ->
                         if (style == FancyFontStyle.HANDWRITING_CUSTOM && !CustomFontManager.hasCustomFont(customFontPathCache)) {
@@ -435,10 +453,12 @@ class TypeGeniusIME : InputMethodService(),
                         sendFancyStyleCard(style, paperTheme, format, signature)
                     },
                     onOpenHandwritingImport = { openCompanionSettings(openFontManager = true) },
-                    onInsertTextSnippet = { snippet ->
-                        if (isTranslatorOpen) translatorSourceText += snippet
-                        else currentInputConnection?.commitText(snippet, 1)
+                    onInsertTextSnippet = { rawSnippet ->
+                        val resolved = ProductivityTextTools.resolveTemplateVariables(rawSnippet, latestClipboardCache)
+                        if (isTranslatorOpen) translatorSourceText += resolved
+                        else currentInputConnection?.commitText(resolved, 1)
                         refreshHandwritingLiveText()
+                        updateSuggestions()
                     },
                     handwritingLiveText = handwritingLiveText,
                     aiSourceText = aiSourceSnapshot,
@@ -463,6 +483,22 @@ class TypeGeniusIME : InputMethodService(),
                     clipboardSearchQuery = clipboardSearchQuery,
                     gifSearchQuery = gifSearchQuery,
                     customStickerText = customStickerText,
+                    todoDraftInput = todoDraftInput,
+                    autofillEditingKey = autofillEditingKey,
+                    autofillDraftValue = autofillDraftValue,
+                    pomodoroRemainingSec = pomodoroRemainingSec,
+                    pomodoroIsBreak = pomodoroIsBreak,
+                    pomodoroRunning = pomodoroRunning,
+                    onTogglePomodoroRun = { togglePomodoroTimer() },
+                    onResetPomodoro = { isBreak -> resetPomodoroTimer(isBreak) },
+                    onStartAutofillEdit = { key, currentValue ->
+                        if (composingBuffer.isNotEmpty()) commitComposing()
+                        autofillEditingKey = key
+                        autofillDraftValue = currentValue
+                        panelInputTarget = PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT
+                    },
+                    onSaveAutofillInlineEdit = { saveAutofillInlineEdit() },
+                    onSubmitTodoDraft = { submitTodoDraft() },
                     onSetPanelInputTarget = { target ->
                         if (composingBuffer.isNotEmpty()) commitComposing()
                         panelInputTarget = target
@@ -473,6 +509,9 @@ class TypeGeniusIME : InputMethodService(),
                             PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery = ""
                             PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery = ""
                             PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText = ""
+                            PanelTextInputTarget.UTILITIES_TODO_INPUT -> todoDraftInput = ""
+                            PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> autofillDraftValue = ""
+                            PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT -> setPanelTargetText("")
                             PanelTextInputTarget.NONE -> {}
                         }
                     },
@@ -497,6 +536,7 @@ class TypeGeniusIME : InputMethodService(),
         isTypingActive = false
         isTranslatorVoiceActive = false
         lastDeletedUndoText = ""
+        lastDeletedWordCount = 0
         lastGlideCommittedWord = ""
         aiSourceSnapshot = ""
         lastAiOriginalText = ""
@@ -593,6 +633,7 @@ class TypeGeniusIME : InputMethodService(),
         super.onDestroy()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        pomodoroJob?.cancel()
         store.clear()
         serviceScope.cancel()
         voiceInputController.destroy()
@@ -631,6 +672,7 @@ class TypeGeniusIME : InputMethodService(),
         playKeyClickSound(action.type)
         if (action.type != KeyType.BACKSPACE) {
             lastDeletedUndoText = ""
+            lastDeletedWordCount = 0
             lastGlideCommittedWord = ""
         }
 
@@ -1277,6 +1319,7 @@ class TypeGeniusIME : InputMethodService(),
 
     private fun handleSuggestionCommit(candidate: String) {
         lastDeletedUndoText = ""
+        lastDeletedWordCount = 0
         val grammarFix = activeGrammarSuggestions[candidate]
         val commitValue = grammarFix?.correctedPhrase ?: candidate
 
@@ -1385,6 +1428,7 @@ class TypeGeniusIME : InputMethodService(),
             if (composingBuffer.isNotEmpty()) {
                 val preview = translatorComposingPreview.ifEmpty { composingBuffer }
                 lastDeletedUndoText = preview + lastDeletedUndoText
+                lastDeletedWordCount++
                 composingBuffer = ""
                 translatorComposingPreview = ""
                 isTypingActive = false
@@ -1397,6 +1441,7 @@ class TypeGeniusIME : InputMethodService(),
             val deleted = translatorSourceText.substring(cutStart)
             translatorSourceText = translatorSourceText.substring(0, cutStart)
             lastDeletedUndoText = deleted + lastDeletedUndoText
+            if (deleted.isNotBlank()) lastDeletedWordCount++
             updateTranslatorSuggestions()
             return
         }
@@ -1406,6 +1451,7 @@ class TypeGeniusIME : InputMethodService(),
             val top = suggestions.firstOrNull() ?: composingBuffer
             ic.commitText("", 1)
             lastDeletedUndoText = top + lastDeletedUndoText
+            lastDeletedWordCount++
             composingBuffer = ""
             isTypingActive = false
             refreshHandwritingLiveText()
@@ -1424,6 +1470,7 @@ class TypeGeniusIME : InputMethodService(),
         if (deletedChunk.isNotEmpty()) {
             ic.deleteSurroundingText(deletedChunk.length, 0)
             lastDeletedUndoText = deletedChunk + lastDeletedUndoText
+            if (deletedChunk.isNotBlank()) lastDeletedWordCount++
         }
         updateAutoCapitalizeState()
         refreshHandwritingLiveText()
@@ -1434,6 +1481,7 @@ class TypeGeniusIME : InputMethodService(),
         val toRestore = lastDeletedUndoText
         if (toRestore.isEmpty()) return
         lastDeletedUndoText = ""
+        lastDeletedWordCount = 0
         if (isTranslatorOpen) {
             translatorSourceText += toRestore
             updateTranslatorSuggestions()
@@ -1466,6 +1514,7 @@ class TypeGeniusIME : InputMethodService(),
             } else rawTop
 
             lastDeletedUndoText = ""
+            lastDeletedWordCount = 0
             lastGlideCommittedWord = topStyled
             lastTypedWordPreview = rawTop
 
@@ -1722,8 +1771,14 @@ class TypeGeniusIME : InputMethodService(),
                     lastTypedWordPreview = UnicodeTextStyler.unstyleToPlain(lastWord)
                 }
                 val math = OfflineMathEvaluator.evaluateIfTriggered(lastWord)
+                val unitConversion = if (math == null && lastWord.isNotEmpty()) {
+                    ProductivityTextTools.evaluateInlineUnitOrCurrency(lastWord)
+                } else null
                 val shortcutMatches = if (lastWord.isNotEmpty()) {
                     shortcutRepository.findMatchingExpansions(lastWord)
+                } else emptyList()
+                val islamicMatches = if (lastWord.isNotEmpty()) {
+                    com.example.data.IslamicToolkit.matchQuickIslamicSuggestions(UnicodeTextStyler.unstyleToPlain(lastWord))
                 } else emptyList()
 
                 val plainContext = if (activeFancyStyle != FancyFontStyle.NORMAL) {
@@ -1757,9 +1812,14 @@ class TypeGeniusIME : InputMethodService(),
                         add(it.resultString)
                         add(it.equationString)
                     }
+                    unitConversion?.let {
+                        add(it.resultString)
+                        add(it.detailLabel)
+                    }
                     addAll(grammarFixes.map { it.displayLabel })
                     addAll(bigramPreds)
                     addAll(predictedEmojis)
+                    addAll(islamicMatches)
                     addAll(shortcutMatches)
                     addAll(dictPreds)
                 }.distinct().take(6)
@@ -1803,17 +1863,144 @@ class TypeGeniusIME : InputMethodService(),
         PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery
         PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery
         PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText
+        PanelTextInputTarget.UTILITIES_TODO_INPUT -> todoDraftInput
+        PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> autofillDraftValue
+        PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT -> notepadLiveDraft
         PanelTextInputTarget.NONE -> ""
     }
 
     private fun setPanelTargetText(value: String) {
-        val capped = value.take(64)
+        val cap = when (panelInputTarget) {
+            PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT -> 1000
+            PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> 220
+            PanelTextInputTarget.UTILITIES_TODO_INPUT -> 140
+            else -> 64
+        }
+        val capped = value.take(cap)
         when (panelInputTarget) {
             PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery = capped
             PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery = capped
             PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText = capped
+            PanelTextInputTarget.UTILITIES_TODO_INPUT -> todoDraftInput = capped
+            PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> autofillDraftValue = capped
+            PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT -> {
+                notepadLiveDraft = capped
+                serviceScope.launch { settingsManager.setNotepadDraft(capped) }
+            }
             PanelTextInputTarget.NONE -> {}
         }
+    }
+
+    private fun submitTodoDraft() {
+        val clean = todoDraftInput.trim()
+        if (clean.isNotEmpty()) {
+            serviceScope.launch { settingsManager.addQuickTodo(clean) }
+            todoDraftInput = ""
+        }
+        composingBuffer = ""
+        panelInputTarget = PanelTextInputTarget.NONE
+    }
+
+    private fun saveAutofillInlineEdit() {
+        val k = autofillEditingKey
+        val v = autofillDraftValue.trim()
+        if (k.isNotBlank()) {
+            serviceScope.launch { settingsManager.updateAutofillField(k, v) }
+        }
+        composingBuffer = ""
+        panelInputTarget = PanelTextInputTarget.NONE
+    }
+
+    private fun togglePomodoroTimer() {
+        if (pomodoroRunning) {
+            pomodoroRunning = false
+            pomodoroJob?.cancel()
+            pomodoroJob = null
+        } else {
+            if (pomodoroRemainingSec <= 0) {
+                pomodoroRemainingSec = if (pomodoroIsBreak) 5 * 60 else 25 * 60
+            }
+            pomodoroRunning = true
+            pomodoroJob?.cancel()
+            pomodoroJob = serviceScope.launch {
+                while (pomodoroRunning && pomodoroRemainingSec > 0) {
+                    delay(1000L)
+                    if (pomodoroRunning && pomodoroRemainingSec > 0) {
+                        pomodoroRemainingSec -= 1
+                    }
+                }
+                if (pomodoroRemainingSec <= 0 && pomodoroRunning) {
+                    pomodoroRunning = false
+                    pomodoroIsBreak = !pomodoroIsBreak
+                    pomodoroRemainingSec = if (pomodoroIsBreak) 5 * 60 else 25 * 60
+                    Toast.makeText(
+                        this@TypeGeniusIME,
+                        if (pomodoroIsBreak) "ফোকাস সেশন সম্পন্ন! ৫ মিনিট ব্রেক শুরু করুন।" else "ব্রেক শেষ! নতুন ফোকাস সেশন প্রস্তুত।",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun resetPomodoroTimer(isBreak: Boolean) {
+        pomodoroRunning = false
+        pomodoroJob?.cancel()
+        pomodoroJob = null
+        pomodoroIsBreak = isBreak
+        pomodoroRemainingSec = if (isBreak) 5 * 60 else 25 * 60
+    }
+
+    private fun transformEditorText(mode: TextTransformMode) {
+        if (isTranslatorOpen) {
+            val trimmed = translatorSourceText.trimEnd()
+            val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
+            if (lastWord.isNotEmpty()) {
+                val base = trimmed.dropLast(lastWord.length)
+                val trailingSpaces = translatorSourceText.length - trimmed.length
+                val transformed = ProductivityTextTools.transformText(lastWord, mode)
+                translatorSourceText = "$base$transformed" + " ".repeat(trailingSpaces)
+            }
+            return
+        }
+
+        val ic = currentInputConnection ?: return
+        if (composingBuffer.isNotEmpty()) commitComposing()
+
+        val selected = ic.getSelectedText(0)?.toString()
+        if (!selected.isNullOrEmpty()) {
+            ic.commitText(ProductivityTextTools.transformText(selected, mode), 1)
+            refreshHandwritingLiveText()
+            updateSuggestions()
+            return
+        }
+
+        val before = ic.getTextBeforeCursor(80, 0)?.toString().orEmpty()
+        val trimmed = before.trimEnd()
+        val trailingSpaces = before.length - trimmed.length
+        val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
+        if (lastWord.isNotEmpty()) {
+            val transformed = ProductivityTextTools.transformText(lastWord, mode)
+            ic.deleteSurroundingText(lastWord.length + trailingSpaces, 0)
+            ic.commitText(transformed + " ".repeat(trailingSpaces), 1)
+            lastTypedWordPreview = transformed
+            refreshHandwritingLiveText()
+            updateSuggestions()
+        }
+    }
+
+    private fun insertNumberedListPrefix(bengaliDigits: Boolean) {
+        if (isTranslatorOpen) {
+            translatorSourceText += ProductivityTextTools.nextNumberedLinePrefix(translatorSourceText, bengaliDigits)
+            return
+        }
+        val ic = currentInputConnection ?: return
+        if (composingBuffer.isNotEmpty()) commitComposing()
+        val before = ic.getTextBeforeCursor(120, 0)?.toString().orEmpty()
+        val prefix = ProductivityTextTools.nextNumberedLinePrefix(before, bengaliDigits)
+        ic.commitText(prefix, 1)
+        refreshHandwritingLiveText()
+        updateSuggestions()
     }
 
     private fun handlePanelInputKeyAction(action: KeyAction) {
@@ -1881,7 +2068,12 @@ class TypeGeniusIME : InputMethodService(),
             KeyType.LANGUAGE_SWITCH -> cycleLanguage(forward = true)
             KeyType.ENTER -> {
                 composingBuffer = ""
-                panelInputTarget = PanelTextInputTarget.NONE
+                when (panelInputTarget) {
+                    PanelTextInputTarget.UTILITIES_TODO_INPUT -> submitTodoDraft()
+                    PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> saveAutofillInlineEdit()
+                    PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT -> setPanelTargetText(getPanelTargetText() + "\n")
+                    else -> panelInputTarget = PanelTextInputTarget.NONE
+                }
             }
             else -> {}
         }

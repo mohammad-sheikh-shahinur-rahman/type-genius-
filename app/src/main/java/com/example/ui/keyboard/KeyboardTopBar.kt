@@ -90,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.BengaliCalendarUtils
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.local.SmartClipInfo
 import com.example.model.KeyboardHeightPreset
@@ -118,6 +119,7 @@ fun KeyboardTopBar(
     heightPreset: KeyboardHeightPreset = KeyboardHeightPreset.NORMAL,
     liveGrammarIssueCount: Int = 0,
     canUndoDelete: Boolean = false,
+    undoDeletedWordCount: Int = 0,
     smartClipSuggestion: SmartClipInfo? = null,
     activeFancyStyle: FancyFontStyle = FancyFontStyle.NORMAL,
     draggingTool: KeyboardToolId? = null,
@@ -554,7 +556,11 @@ fun KeyboardTopBar(
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "Undo",
+                            text = if (undoDeletedWordCount > 1) {
+                                "Undo (${BengaliCalendarUtils.toBengaliDigits(undoDeletedWordCount.toString())})"
+                            } else {
+                                "Undo"
+                            },
                             color = colors.accent,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold

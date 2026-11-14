@@ -120,6 +120,7 @@ import com.example.data.CustomFontManager
 import com.example.data.KeyboardFontPreset
 import com.example.data.SettingsManager
 import com.example.data.dictionary.FancyFontStyle
+import com.example.data.dictionary.TextTransformMode
 import com.example.data.dictionary.UnicodeTextStyler
 import com.example.data.local.ClipboardItem
 import com.example.data.local.SmartClipInfo
@@ -162,6 +163,7 @@ fun KeyboardView(
     activeFancyStyle: FancyFontStyle = FancyFontStyle.NORMAL,
     lastTypedWordPreview: String = "",
     canUndoDelete: Boolean = false,
+    undoDeletedWordCount: Int = 0,
     isAutoIncognitoActive: Boolean = false,
     onOpenTranslator: () -> Unit = {},
     onCloseTranslator: () -> Unit = {},
@@ -196,6 +198,8 @@ fun KeyboardView(
     onPaste: () -> Unit,
     onDeleteWordBackward: () -> Unit = {},
     onUndoDelete: () -> Unit = {},
+    onTransformText: (TextTransformMode) -> Unit = {},
+    onInsertNumberedList: (bengaliDigits: Boolean) -> Unit = {},
     onGlideCommitted: (trail: List<Pair<Float, Float>>, keyCenters: Map<String, Pair<Float, Float>>) -> Unit = { _, _ -> },
     onSelectFancyStyle: (FancyFontStyle) -> Unit = {},
     onTransformLastWord: (FancyFontStyle) -> Unit = {},
@@ -216,6 +220,17 @@ fun KeyboardView(
     clipboardSearchQuery: String = "",
     gifSearchQuery: String = "",
     customStickerText: String = "অস্থির হইছে বস!",
+    todoDraftInput: String = "",
+    autofillEditingKey: String = "",
+    autofillDraftValue: String = "",
+    pomodoroRemainingSec: Int = 25 * 60,
+    pomodoroIsBreak: Boolean = false,
+    pomodoroRunning: Boolean = false,
+    onTogglePomodoroRun: () -> Unit = {},
+    onResetPomodoro: (isBreak: Boolean) -> Unit = {},
+    onStartAutofillEdit: (key: String, currentValue: String) -> Unit = { _, _ -> },
+    onSaveAutofillInlineEdit: () -> Unit = {},
+    onSubmitTodoDraft: () -> Unit = {},
     onSetPanelInputTarget: (PanelTextInputTarget) -> Unit = {},
     onClearPanelSearchQuery: (PanelTextInputTarget) -> Unit = {},
     onCustomStickerTextChange: (String) -> Unit = {},
@@ -270,6 +285,10 @@ fun KeyboardView(
     val customAiPrompts by settingsManager.customAiPrompts.collectAsState(initial = emptyList())
     val notepadDraft by settingsManager.notepadDraft.collectAsState(initial = "")
     val userTemplates by settingsManager.userTemplates.collectAsState(initial = SettingsManager.DEFAULT_USER_TEMPLATES)
+    val autofillProfile by settingsManager.autofillProfile.collectAsState(initial = emptyMap())
+    val todoItems by settingsManager.quickTodoItems.collectAsState(initial = emptyList())
+    val tasbihCount by settingsManager.tasbihCount.collectAsState(initial = 0)
+    val tasbihDhikrIndex by settingsManager.tasbihDhikrIndex.collectAsState(initial = 0)
     val keyPopupEnabled by settingsManager.keyPopupEnabled.collectAsState(initial = true)
     val spacebarCursorScrubEnabled by settingsManager.spacebarCursorScrubEnabled.collectAsState(initial = true)
     val avroJuktakkhorBarEnabled by settingsManager.avroJuktakkhorBarEnabled.collectAsState(initial = true)
@@ -740,6 +759,7 @@ fun KeyboardView(
                 heightPreset = heightPreset,
                 liveGrammarIssueCount = liveGrammarIssueCount,
                 canUndoDelete = canUndoDelete,
+                undoDeletedWordCount = undoDeletedWordCount,
                 smartClipSuggestion = smartClipSuggestion,
                 activeFancyStyle = activeFancyStyle,
                 draggingTool = draggingTool,
@@ -1235,6 +1255,7 @@ fun KeyboardView(
                         onCut = onCut,
                         onPaste = onPaste,
                         onBackspace = { onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE)) },
+                        onTransformText = onTransformText,
                         onHaptic = { haptic() }
                     )
                 }
@@ -1316,11 +1337,77 @@ fun KeyboardView(
                 }
 
                 KeyboardViewMode.UTILITIES -> {
+                    val isUtilitiesInlineOpen = panelInputTarget in setOf(
+                        PanelTextInputTarget.UTILITIES_TODO_INPUT,
+                        PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT,
+                        PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT
+                    )
                     QuickToolsNotepadPanel(
                         colors = colors,
                         notepadDraft = notepadDraft,
                         userTemplates = userTemplates,
+                        autofillProfile = autofillProfile,
+                        todoItems = todoItems,
+                        panelInputTarget = panelInputTarget,
+                        todoDraftInput = todoDraftInput,
+                        autofillEditingKey = autofillEditingKey,
+                        autofillDraftValue = autofillDraftValue,
+                        pomodoroRemainingSec = pomodoroRemainingSec,
+                        pomodoroIsBreak = pomodoroIsBreak,
+                        pomodoroRunning = pomodoroRunning,
+                        tasbihCount = tasbihCount,
+                        tasbihDhikrIndex = tasbihDhikrIndex,
+                        onIncrementTasbih = {
+                            coroutineScope.launch { settingsManager.incrementTasbih() }
+                        },
+                        onResetTasbih = {
+                            coroutineScope.launch { settingsManager.resetTasbih() }
+                        },
+                        onCycleTasbihDhikr = {
+                            coroutineScope.launch {
+                                settingsManager.cycleTasbihDhikr(com.example.data.IslamicToolkit.tasbihPresets.size)
+                            }
+                        },
+                        onTogglePomodoroRun = onTogglePomodoroRun,
+                        onResetPomodoro = onResetPomodoro,
+                        onStartTodoInput = {
+                            onSetPanelInputTarget(
+                                if (panelInputTarget == PanelTextInputTarget.UTILITIES_TODO_INPUT) {
+                                    PanelTextInputTarget.NONE
+                                } else {
+                                    PanelTextInputTarget.UTILITIES_TODO_INPUT
+                                }
+                            )
+                        },
+                        onSubmitTodoDraft = onSubmitTodoDraft,
+                        onToggleTodoDone = { id ->
+                            coroutineScope.launch { settingsManager.toggleQuickTodo(id) }
+                        },
+                        onDeleteTodo = { id ->
+                            coroutineScope.launch { settingsManager.deleteQuickTodo(id) }
+                        },
+                        onStartAutofillEdit = onStartAutofillEdit,
+                        onSaveAutofillInlineEdit = onSaveAutofillInlineEdit,
+                        onCancelPanelInput = { onSetPanelInputTarget(PanelTextInputTarget.NONE) },
+                        onToggleNotepadInput = {
+                            onSetPanelInputTarget(
+                                if (panelInputTarget == PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT) {
+                                    PanelTextInputTarget.NONE
+                                } else {
+                                    PanelTextInputTarget.UTILITIES_NOTEPAD_INPUT
+                                }
+                            )
+                        },
+                        onOpenSettingsProfile = {
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onOpenSettings()
+                        },
+                        onInsertNumberedList = { bnDigits ->
+                            onInsertNumberedList(bnDigits)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
                         onInsertSnippet = { snippet ->
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
                             onInsertTextSnippet(snippet)
                             onSelectViewMode(KeyboardViewMode.LETTERS)
                         },
@@ -1334,9 +1421,36 @@ fun KeyboardView(
                             coroutineScope.launch { settingsManager.removeUserTemplate(tmpl) }
                         },
                         onGetFieldTextForTts = onRefreshAiSourceText,
-                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onClose = {
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
                         onHaptic = { haptic() }
                     )
+                    if (isUtilitiesInlineOpen) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompactPanelInlineKeyboard(
+                            activeLanguage = activeLanguage,
+                            isShifted = isShifted,
+                            isCapsLock = isCapsLock,
+                            colors = colors,
+                            rowHeight = (responsiveRowHeight * 0.78f).coerceAtLeast(38.dp),
+                            gap = responsiveGap,
+                            hideSecondaryHint = hideLongPressHints,
+                            onKeyAction = { action ->
+                                haptic()
+                                onKeyAction(action)
+                            },
+                            onDone = {
+                                haptic()
+                                when (panelInputTarget) {
+                                    PanelTextInputTarget.UTILITIES_TODO_INPUT -> onSubmitTodoDraft()
+                                    PanelTextInputTarget.UTILITIES_AUTOFILL_EDIT -> onSaveAutofillInlineEdit()
+                                    else -> onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                                }
+                            }
+                        )
+                    }
                 }
 
                 KeyboardViewMode.STICKERS_KAOMOJI -> {

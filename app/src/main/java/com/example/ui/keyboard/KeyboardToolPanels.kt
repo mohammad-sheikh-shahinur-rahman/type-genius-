@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.BengaliCalendarUtils
+import com.example.data.dictionary.TextTransformMode
 import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardHeightPreset
@@ -552,6 +553,7 @@ fun TextEditorPanel(
     onCut: () -> Unit = {},
     onPaste: () -> Unit,
     onBackspace: () -> Unit,
+    onTransformText: (TextTransformMode) -> Unit = {},
     onHaptic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -567,7 +569,7 @@ fun TextEditorPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp),
+                .height(166.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Box(
@@ -700,7 +702,44 @@ fun TextEditorPanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "রূপান্তর:",
+                color = colors.textSecondary,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            TextTransformMode.entries.forEach { mode ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.keySpecialBackground)
+                        .clickable {
+                            onHaptic()
+                            onTransformText(mode)
+                        }
+                        .padding(horizontal = 9.dp, vertical = 6.dp)
+                        .testTag("editor_transform_${mode.tagSuffix}")
+                ) {
+                    Text(
+                        text = mode.label,
+                        color = colors.accent,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             EditorTextTile(

@@ -414,4 +414,60 @@ class ExampleRobolectricTest {
         assertTrue("Expected tall portrait letter height >= 1240, got ${decoded.height}", decoded.height >= 1240)
         decoded.recycle()
     }
+
+    @Test
+    fun `autofill profile vault and quick todo checklist persist cleanly and round-trip in offline json backup`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsManager.getInstance(context)
+
+        settings.setAutofillProfileMap(
+            mapOf(
+                "name" to "Shahinur Islam",
+                "phone" to "+8801700000000",
+                "bkash" to "01700000000"
+            )
+        )
+        settings.addQuickTodo("অ্যাপ আপডেট রিলিজ করা")
+        settings.addQuickTodo("টিম মিটিং ৪টায়")
+
+        val profile = settings.autofillProfile.first()
+        assertEquals("Shahinur Islam", profile["name"])
+        assertEquals("+8801700000000", profile["phone"])
+
+        val todosBefore = settings.quickTodoItems.first()
+        assertTrue(todosBefore.any { it.text == "অ্যাপ আপডেট রিলিজ করা" })
+        val targetId = todosBefore.first { it.text == "অ্যাপ আপডেট রিলিজ করা" }.id
+        settings.toggleQuickTodo(targetId)
+        assertTrue(settings.quickTodoItems.first().first { it.id == targetId }.done)
+
+        val backupJson = com.example.data.BackupRestoreManager.exportAllToJson(context)
+        assertTrue(backupJson.contains("Shahinur Islam"))
+        assertTrue(backupJson.contains("অ্যাপ আপডেট রিলিজ করা"))
+
+        settings.setAutofillProfileMap(emptyMap())
+        settings.setQuickTodoItems(emptyList())
+        assertTrue(settings.autofillProfile.first().isEmpty())
+        assertTrue(settings.quickTodoItems.first().isEmpty())
+
+        com.example.data.BackupRestoreManager.importAllFromJson(context, backupJson)
+        assertEquals("Shahinur Islam", settings.autofillProfile.first()["name"])
+        assertTrue(settings.quickTodoItems.first().any { it.text == "অ্যাপ আপডেট রিলিজ করা" })
+    }
+
+    @Test
+    fun `digital tasbih counter and dhikr selection persist in datastore`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = SettingsManager.getInstance(context)
+
+        settings.resetTasbih()
+        assertEquals(0, settings.tasbihCount.first())
+
+        settings.incrementTasbih()
+        settings.incrementTasbih()
+        assertEquals(2, settings.tasbihCount.first())
+
+        settings.cycleTasbihDhikr(com.example.data.IslamicToolkit.tasbihPresets.size)
+        assertEquals(1, settings.tasbihDhikrIndex.first())
+        assertEquals(0, settings.tasbihCount.first())
+    }
 }
