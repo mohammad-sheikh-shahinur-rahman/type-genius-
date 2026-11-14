@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test_and_build:
-    name: Unit Tests, Debug APK & Optional Release
+    name: Unit Tests, Debug APK & Release Check
     runs-on: ubuntu-latest
 
     steps:
@@ -28,25 +28,39 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
+      - name: Setup Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Grant Gradle Permission
-        run: chmod +x ./gradlew
+        with:
+          gradle-version: '9.3.1'
 
       - name: Run Unit & Robolectric Tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: gradle :app:testDebugUnitTest
 
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug
+        run: |
+          gradle :app:assembleDebug
+          cp -f app/build/outputs/apk/debug/app-debug.apk TypeGenius-Keyboard.apk
 
-      - name: Upload Debug APK
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TypeGenius-Debug-APK
-          path: '**/build/outputs/apk/debug/*.apk'
+          path: |
+            TypeGenius-Keyboard.apk
+            app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish Latest APK to GitHub Releases
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: TypeGenius Keyboard (Latest Build)
+          files: TypeGenius-Keyboard.apk
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Decode Release Keystore (if configured)
         if: ${{ secrets.KEYSTORE_BASE64 != '' }}
@@ -59,7 +73,7 @@ jobs:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease :app:bundleRelease
+        run: gradle :app:assembleRelease :app:bundleRelease
 
       - name: Upload Release Artifacts
         if: ${{ secrets.KEYSTORE_BASE64 != '' }}
