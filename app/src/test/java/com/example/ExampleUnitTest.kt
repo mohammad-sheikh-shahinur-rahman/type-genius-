@@ -798,4 +798,29 @@ class ExampleUnitTest {
             assertTrue(hint.avroCode.isNotBlank())
         }
     }
+
+    @Test
+    fun testOfflineVoicePostProcessor_punctuationCommandsRerankingAndCapitalization() {
+        val bnProcessed = com.example.service.OfflineVoicePostProcessor.processSpokenText(
+            rawText = "আমি ভালো আছি দাঁড়ি তুমি কেমন আছো প্রশ্নবোধক",
+            languageTag = "bn-BD"
+        )
+        assertEquals("আমি ভালো আছি। তুমি কেমন আছো?", bnProcessed)
+
+        val enProcessed = com.example.service.OfflineVoicePostProcessor.processSpokenText(
+            rawText = "hello comma i am fine full stop new line how are you question mark",
+            languageTag = "en-US"
+        )
+        assertEquals("Hello, I am fine.\nHow are you?", enProcessed)
+
+        val pickedBn = com.example.service.OfflineVoicePostProcessor.pickBestCandidate(
+            candidates = listOf("ami bangla", "আমি বাংলা"),
+            confidences = floatArrayOf(0.8f, 0.78f),
+            languageTag = "bn-BD"
+        )
+        assertEquals("আমি বাংলা", pickedBn)
+
+        assertTrue(com.example.service.OfflineVoicePostProcessor.isDuplicateEcho("Hello world", "hello world", 1200L))
+        assertFalse(com.example.service.OfflineVoicePostProcessor.isDuplicateEcho("Hello world", "hello world", 4000L))
+    }
 }

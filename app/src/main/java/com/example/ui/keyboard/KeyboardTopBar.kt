@@ -98,6 +98,7 @@ import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
 import com.example.service.VoiceInputController
+import com.example.service.VoiceRoutingMode
 
 @Composable
 fun KeyboardTopBar(
@@ -963,8 +964,10 @@ private fun EnhancedVoiceBar(
             }
 
             val voiceLangLabel = voiceController?.activeVoiceBadgeLabel() ?: languageLabel
-            val isOfflinePriority = voiceController?.preferOffline ?: true
+            val routingMode = voiceController?.routingMode ?: VoiceRoutingMode.AUTO
+            val isOfflineNow = voiceController?.isUsingOfflineEngine == true
             val offlineMissing = voiceController?.offlineModelMissing == true
+            val offlineInstalled = voiceController?.isCurrentOfflinePackInstalled
 
             Box(
                 modifier = Modifier
@@ -1001,10 +1004,14 @@ private fun EnhancedVoiceBar(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = voiceController?.permissionMissing == true || offlineMissing) {
+                    .clickable(
+                        enabled = voiceController?.permissionMissing == true ||
+                            offlineMissing ||
+                            offlineInstalled == false
+                    ) {
                         if (voiceController?.permissionMissing == true) {
                             onOpenSettings()
-                        } else if (offlineMissing) {
+                        } else if (offlineMissing || offlineInstalled == false) {
                             voiceController?.downloadOfflineVoicePackOrOpenSettings()
                         }
                     },
@@ -1028,7 +1035,7 @@ private fun EnhancedVoiceBar(
                 }
             }
 
-            if (offlineMissing && voiceController != null) {
+            if ((offlineMissing || offlineInstalled == false) && voiceController != null) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -1049,24 +1056,36 @@ private fun EnhancedVoiceBar(
                 Spacer(modifier = Modifier.width(4.dp))
             }
 
-            // Offline priority toggle pill (Offline on-device vs Online/Auto)
+            // Smart routing pill: অটো (online when net available, offline when disconnected) / অফলাইন / অনলাইন
+            val routingPillLabel = when (routingMode) {
+                VoiceRoutingMode.AUTO -> if (isOfflineNow) "অটো•অফলাইন" else "অটো•অনলাইন"
+                VoiceRoutingMode.OFFLINE_ONLY -> if (offlineInstalled == true) "অফলাইন ✓" else "অফলাইন"
+                VoiceRoutingMode.ONLINE_ONLY -> "অনলাইন"
+            }
+            val routingBg = if (isOfflineNow || routingMode == VoiceRoutingMode.OFFLINE_ONLY) {
+                Color(0xFF00C853).copy(alpha = 0.18f)
+            } else {
+                colors.accent.copy(alpha = 0.16f)
+            }
+            val routingFg = if (isOfflineNow || routingMode == VoiceRoutingMode.OFFLINE_ONLY) {
+                Color(0xFF00E676)
+            } else {
+                colors.accent
+            }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (isOfflinePriority) Color(0xFF00C853).copy(alpha = 0.18f)
-                        else colors.keySpecialBackground
-                    )
+                    .background(routingBg)
                     .clickable(enabled = voiceController != null) {
-                        voiceController?.togglePreferOffline()
+                        voiceController?.cycleRoutingMode()
                     }
                     .padding(horizontal = 6.dp, vertical = 4.dp)
                     .testTag("voice_offline_toggle"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isOfflinePriority) "অফলাইন" else "অনলাইন",
-                    color = if (isOfflinePriority) Color(0xFF00E676) else colors.textSecondary,
+                    text = routingPillLabel,
+                    color = routingFg,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
