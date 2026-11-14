@@ -21,27 +21,27 @@ enum class FancyFontStyle(
     NORMAL("normal", "সাধারণ (Normal)", "Aa", "TypeGenius", FontCategory.ALL),
     HANDWRITING_CUSTOM(
         id = "handwriting_custom",
-        displayName = "আমার হাতের লেখা ফন্ট (Custom)",
-        badgeLabel = "✍️ নিজস্ব",
-        sample = "আমার হাতের লেখা",
+        displayName = "আমার হাতের লেখা (কার্সিভ + নিজস্ব)",
+        badgeLabel = "✍️ 𝒜𝒷",
+        sample = "বাংলা / 𝒯𝓎𝓅ℯ",
         category = FontCategory.HANDWRITING,
         supportsAllScripts = true,
         isHandwritingFont = true
     ),
     HANDWRITING_ATMA(
         id = "handwriting_atma",
-        displayName = "বাংলা হাতের লেখা (Atma)",
-        badgeLabel = "✍️ আত্মা",
-        sample = "হাতের লেখা বাংলা",
+        displayName = "হাতের লেখা কার্সিভ (Atma)",
+        badgeLabel = "✍️ 𝒜",
+        sample = "বাংলা / 𝒯𝓎𝓅ℯ",
         category = FontCategory.HANDWRITING,
         supportsAllScripts = true,
         isHandwritingFont = true
     ),
     HANDWRITING_GALADA(
         id = "handwriting_galada",
-        displayName = "বাংলা ক্যালিগ্রাফি (Galada)",
-        badgeLabel = "🖋️ গলাদা",
-        sample = "শৈল্পিক বাংলা লেখা",
+        displayName = "ক্যালিগ্রাফি বোল্ড (Galada)",
+        badgeLabel = "🖋️ 𝓐",
+        sample = "বাংলা / 𝓣𝔂𝓹𝓮",
         category = FontCategory.HANDWRITING,
         supportsAllScripts = true,
         isHandwritingFont = true
@@ -194,12 +194,9 @@ object UnicodeTextStyler {
     fun styleText(input: String, style: FancyFontStyle): String {
         if (input.isEmpty()) return input
         val normalized = unstyleToPlain(input)
-        if (style == FancyFontStyle.NORMAL || style.isHandwritingFont) return normalized
+        if (style == FancyFontStyle.NORMAL) return normalized
         return when (style) {
-            FancyFontStyle.NORMAL,
-            FancyFontStyle.HANDWRITING_CUSTOM,
-            FancyFontStyle.HANDWRITING_ATMA,
-            FancyFontStyle.HANDWRITING_GALADA -> normalized
+            FancyFontStyle.NORMAL -> normalized
             FancyFontStyle.DECORATED_STAR -> "✦ $normalized ✦"
             FancyFontStyle.DECORATED_BRACKET -> "【 $normalized 】"
             FancyFontStyle.DECORATED_ROYAL -> "꧁ $normalized ꧂"
@@ -219,11 +216,11 @@ object UnicodeTextStyler {
 
     /**
      * Used for live per-character typing.
-     * Note: Decorator frames do not wrap individual characters; they wrap completed words.
-     * Handwriting fonts output clean plain characters & render in the live handwriting preview/card.
+     * Handwriting styles directly output Unicode Calligraphic/Cursive glyphs for Latin & digits
+     * in external apps (Browser, Facebook, Messenger), while keeping Bengali Unicode intact.
      */
     fun styleSingleInput(token: String, style: FancyFontStyle): String {
-        if (style == FancyFontStyle.NORMAL || style.isHandwritingFont || token.isEmpty()) return token
+        if (style == FancyFontStyle.NORMAL || token.isEmpty()) return token
         if (style.isDecoratorFrame) return token
         return when (style) {
             FancyFontStyle.UNDERLINE -> applyCombiningMarkSafe(token, '\u0332')
@@ -280,9 +277,6 @@ object UnicodeTextStyler {
     private fun mapChar(c: Char, style: FancyFontStyle): String {
         return when (style) {
             FancyFontStyle.NORMAL,
-            FancyFontStyle.HANDWRITING_CUSTOM,
-            FancyFontStyle.HANDWRITING_ATMA,
-            FancyFontStyle.HANDWRITING_GALADA,
             FancyFontStyle.UNDERLINE,
             FancyFontStyle.DOUBLE_UNDERLINE,
             FancyFontStyle.STRIKETHROUGH,
@@ -290,6 +284,11 @@ object UnicodeTextStyler {
             FancyFontStyle.DECORATED_BRACKET,
             FancyFontStyle.DECORATED_ROYAL,
             FancyFontStyle.DECORATED_WING -> c.toString()
+
+            FancyFontStyle.HANDWRITING_CUSTOM,
+            FancyFontStyle.HANDWRITING_ATMA -> mapChar(c, FancyFontStyle.SCRIPT_REGULAR)
+
+            FancyFontStyle.HANDWRITING_GALADA -> mapChar(c, FancyFontStyle.SCRIPT_BOLD)
 
             FancyFontStyle.BOLD_SANS -> when (c) {
                 in 'A'..'Z' -> codePointToString(0x1D5D4 + (c - 'A'))

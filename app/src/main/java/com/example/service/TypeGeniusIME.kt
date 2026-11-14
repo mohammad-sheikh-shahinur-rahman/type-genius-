@@ -417,7 +417,7 @@ class TypeGeniusIME : InputMethodService(),
                                 "সেটিংস থেকে আপনার হাতের লেখা (.zip/.ttf) ফন্ট যুক্ত করুন",
                                 Toast.LENGTH_LONG
                             ).show()
-                            openCompanionSettings()
+                            openCompanionSettings(openFontManager = true)
                             return@KeyboardView
                         }
                         activeFancyStyle = style
@@ -434,7 +434,7 @@ class TypeGeniusIME : InputMethodService(),
                     onSendFancyStyleCard = { style, paperTheme, format, signature ->
                         sendFancyStyleCard(style, paperTheme, format, signature)
                     },
-                    onOpenHandwritingImport = { openCompanionSettings() },
+                    onOpenHandwritingImport = { openCompanionSettings(openFontManager = true) },
                     onInsertTextSnippet = { snippet ->
                         if (isTranslatorOpen) translatorSourceText += snippet
                         else currentInputConnection?.commitText(snippet, 1)
@@ -1526,10 +1526,6 @@ class TypeGeniusIME : InputMethodService(),
     }
 
     private fun transformLastWordWithStyle(style: FancyFontStyle) {
-        if (style.isHandwritingFont) {
-            sendFancyStyleCard(style, HandwritingPaperTheme.NOTEBOOK)
-            return
-        }
         if (isTranslatorOpen) {
             val trimmed = translatorSourceText.trimEnd()
             val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
@@ -1777,9 +1773,12 @@ class TypeGeniusIME : InputMethodService(),
         ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
     }
 
-    private fun openCompanionSettings() {
+    private fun openCompanionSettings(openFontManager: Boolean = false) {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            if (openFontManager) {
+                putExtra("open_font_manager", true)
+            }
         }
         startActivity(intent)
     }

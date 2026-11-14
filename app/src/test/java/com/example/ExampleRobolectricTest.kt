@@ -190,6 +190,14 @@ class ExampleRobolectricTest {
 
         val voiceController = com.example.service.VoiceInputController(context)
         assertTrue("Continuous mode should be ON by default for 1-tap voice typing", voiceController.continuousMode)
+        assertTrue("Offline speech priority should be ON by default", voiceController.preferOffline)
+        assertEquals("bn-BD", voiceController.resolveLanguageTag("bn"))
+        assertEquals("bn-BD", voiceController.resolveLanguageTag("bn_phonetic"))
+        assertEquals("en-US", voiceController.resolveLanguageTag("en"))
+        voiceController.toggleBanglaEnglishVoice()
+        assertEquals("EN", voiceController.activeVoiceBadgeLabel())
+        voiceController.toggleBanglaEnglishVoice()
+        assertEquals("বাংলা", voiceController.activeVoiceBadgeLabel())
         assertFalse(voiceController.isSessionActive)
         voiceController.destroy()
     }

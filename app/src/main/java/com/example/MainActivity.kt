@@ -102,12 +102,11 @@ import com.example.ui.app.AboutAppScreen
 import com.example.ui.app.AppAboutMetadata
 import com.example.ui.app.AppearanceAndLayoutScreen
 import com.example.ui.app.BackendlessVerificationScreen
+import com.example.ui.app.FontManagerScreen
 import com.example.ui.app.GeneralSettingsScreen
 import com.example.ui.app.GestureSettingsScreen
-import com.example.ui.app.HandwritingFontSettingsCard
 import com.example.ui.app.LanguagesScreen
 import com.example.ui.app.OfflineTranslatorCard
-import com.example.ui.app.StylishFontStudioCard
 import com.example.ui.keyboard.SpacebarComponent
 import com.example.ui.theme.TGMagenta
 import com.example.ui.theme.TGViolet
@@ -119,21 +118,36 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var settingsManager: SettingsManager
 
+    private var openFontManagerRequest by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashDiagnosticLogger.installUncaughtHandler(this)
         enableEdgeToEdge()
         settingsManager = SettingsManager.getInstance(this)
+        if (intent?.getBooleanExtra("open_font_manager", false) == true) {
+            openFontManagerRequest = true
+        }
 
         setContent {
             TypeGeniusTheme {
                 MainScreen(
                     settingsManager = settingsManager,
+                    openFontManagerOnRequest = openFontManagerRequest,
+                    onConsumeFontManagerRequest = { openFontManagerRequest = false },
                     onOpenImeSettings = { openImeSettings() },
                     onOpenImePicker = { openImePicker() },
                     checkImeStatus = { isImeEnabledAndActive() }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_font_manager", false)) {
+            openFontManagerRequest = true
         }
     }
 
@@ -175,6 +189,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(
     settingsManager: SettingsManager,
+    openFontManagerOnRequest: Boolean = false,
+    onConsumeFontManagerRequest: () -> Unit = {},
     onOpenImeSettings: () -> Unit,
     onOpenImePicker: () -> Unit,
     checkImeStatus: () -> Pair<Boolean, Boolean>
@@ -182,6 +198,18 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var showBackendlessDetails by remember { mutableStateOf(false) }
     var showAboutApp by remember { mutableStateOf(false) }
+    var showFontManager by remember { mutableStateOf(false) }
+
+    LaunchedEffect(openFontManagerOnRequest) {
+        if (openFontManagerOnRequest) {
+            selectedTab = 4
+            showAboutApp = false
+            showBackendlessDetails = false
+            showFontManager = true
+            onConsumeFontManagerRequest()
+        }
+    }
+
     val tabs = listOf(
         "Home" to Icons.Default.Keyboard,
         "Layout" to Icons.Default.Palette,
@@ -190,11 +218,15 @@ fun MainScreen(
         "Settings" to Icons.Default.Settings
     )
 
-    BackHandler(enabled = showAboutApp) {
+    BackHandler(enabled = showFontManager) {
+        showFontManager = false
+    }
+
+    BackHandler(enabled = showAboutApp && !showFontManager) {
         showAboutApp = false
     }
 
-    BackHandler(enabled = showBackendlessDetails && !showAboutApp) {
+    BackHandler(enabled = showBackendlessDetails && !showAboutApp && !showFontManager) {
         showBackendlessDetails = false
     }
 
@@ -211,11 +243,12 @@ fun MainScreen(
                     ) {
                         tabs.forEachIndexed { index, (label, icon) ->
                             NavigationBarItem(
-                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails,
+                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails && !showFontManager,
                                 onClick = {
                                     selectedTab = index
                                     showAboutApp = false
                                     showBackendlessDetails = false
+                                    showFontManager = false
                                 },
                                 icon = { Icon(icon, contentDescription = label) },
                                 label = {
@@ -253,11 +286,12 @@ fun MainScreen(
                     ) {
                         tabs.forEachIndexed { index, (label, icon) ->
                             NavigationRailItem(
-                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails,
+                                selected = selectedTab == index && !showAboutApp && !showBackendlessDetails && !showFontManager,
                                 onClick = {
                                     selectedTab = index
                                     showAboutApp = false
                                     showBackendlessDetails = false
+                                    showFontManager = false
                                 },
                                 icon = { Icon(icon, contentDescription = label) },
                                 label = { Text(label, fontSize = 11.sp) },
@@ -277,7 +311,12 @@ fun MainScreen(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     Box(modifier = Modifier.fillMaxSize().widthIn(max = 1040.dp)) {
-                        if (showAboutApp) {
+                        if (showFontManager) {
+                            FontManagerScreen(
+                                settingsManager = settingsManager,
+                                onBack = { showFontManager = false }
+                            )
+                        } else if (showAboutApp) {
                             AboutAppScreen(
                                 onBack = { showAboutApp = false },
                                 onOpenBackendlessCheck = {
@@ -312,7 +351,8 @@ fun MainScreen(
                                 3 -> LanguagesScreen(settingsManager = settingsManager)
                                 4 -> GeneralSettingsScreen(
                                     settingsManager = settingsManager,
-                                    onNavigateToAbout = { showAboutApp = true }
+                                    onNavigateToAbout = { showAboutApp = true },
+                                    onNavigateToFontManager = { showFontManager = true }
                                 )
                             }
                         }
@@ -662,22 +702,18 @@ fun HomeScreen(
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ActivationCard()
                         TypingStatsCard()
-                        HandwritingFontSettingsCard(settingsManager = settingsManager)
                         SpacebarSandboxCard()
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TypingPlaygroundCard()
                         OfflineTranslatorCard(settingsManager = settingsManager)
-                        StylishFontStudioCard(settingsManager = settingsManager)
                     }
                 }
             } else {
                 ActivationCard()
                 TypingStatsCard()
                 TypingPlaygroundCard()
-                HandwritingFontSettingsCard(settingsManager = settingsManager)
                 OfflineTranslatorCard(settingsManager = settingsManager)
-                StylishFontStudioCard(settingsManager = settingsManager)
                 SpacebarSandboxCard()
             }
 

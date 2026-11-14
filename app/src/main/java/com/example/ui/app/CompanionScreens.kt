@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
@@ -1073,7 +1076,8 @@ fun BackendlessVerificationScreen() {
 @Composable
 fun GeneralSettingsScreen(
     settingsManager: SettingsManager,
-    onNavigateToAbout: () -> Unit = {}
+    onNavigateToAbout: () -> Unit = {},
+    onNavigateToFontManager: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isSystemDark = isSystemInDarkTheme()
@@ -1462,6 +1466,70 @@ fun GeneralSettingsScreen(
             }
         }
 
+        @Composable
+        fun FontManagerEntryCard() {
+            val activeFontId by settingsManager.keyboardFontId.collectAsState(initial = com.example.data.KeyboardFontPreset.ATMA_HANDWRITING.id)
+            val customFontName by settingsManager.customFontName.collectAsState(initial = "")
+            val activeFancy by settingsManager.activeFancyFontStyle.collectAsState(initial = com.example.data.dictionary.FancyFontStyle.NORMAL)
+            val activeLabel = when {
+                activeFontId == com.example.data.KeyboardFontPreset.CUSTOM_IMPORTED.id && customFontName.isNotBlank() ->
+                    "নিজস্ব: $customFontName"
+                activeFancy != com.example.data.dictionary.FancyFontStyle.NORMAL ->
+                    activeFancy.displayName
+                else -> com.example.data.KeyboardFontPreset.fromId(activeFontId).displayName
+            }
+
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToFontManager)
+                    .testTag("settings_open_font_manager")
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(TGMagenta.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Draw, contentDescription = "Font Manager", tint = TGMagenta)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "ফন্ট ম্যানেজার (Font Manager)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "সক্রিয়: $activeLabel",
+                            fontSize = 12.sp,
+                            color = TGMagenta,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "হাতের লেখা ফন্ট (.zip/.ttf ইমপোর্ট), ফ্যান্সি ফন্ট স্টুডিও ও স্বাক্ষর ম্যানেজ করুন →",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Open Font Manager",
+                        tint = TGMagenta
+                    )
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1471,12 +1539,12 @@ fun GeneralSettingsScreen(
         ) {
             SettingsSectionHero(
                 title = "সেটিংস ও কাস্টমাইজেশন",
-                subtitle = "থিম, হাতের লেখা ফন্ট, সাউন্ড, ভাইব্রেশন ও ব্যক্তিগত শর্টকাট ম্যানেজ করুন",
+                subtitle = "থিম, ফন্ট ম্যানেজার, সাউন্ড, ভাইব্রেশন ও ব্যক্তিগত শর্টকাট ম্যানেজ করুন",
                 badgeText = "PRO SETTINGS",
                 icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White) }
             )
 
-            HandwritingFontSettingsCard(settingsManager = settingsManager)
+            FontManagerEntryCard()
 
             if (isWideSettings) {
                 Row(
@@ -1514,6 +1582,55 @@ fun GeneralSettingsScreen(
                 AboutCompanyCard()
             }
         }
+    }
+}
+
+@Composable
+fun FontManagerScreen(
+    settingsManager: SettingsManager,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("font_manager_back_button")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "সেটিংসে ফিরে যান",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "ফন্ট ম্যানেজার (Font Manager)",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "কাস্টম .ttf/.zip ফন্ট, হাতের লেখা ও ইউনিকোড স্টাইলিশ ফন্ট পরিচালনা করুন",
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        HandwritingFontSettingsCard(settingsManager = settingsManager)
+        StylishFontStudioCard(settingsManager = settingsManager)
     }
 }
 
@@ -1688,12 +1805,10 @@ fun AppearanceAndLayoutScreen(settingsManager: SettingsManager) {
     ) {
         SettingsSectionHero(
             title = "চেহারা ও লে-আউট (Layout)",
-            subtitle = "বাংলা হাতের লেখা ফন্ট, কী-বোর্ডের সারি, উচ্চতা ও এক হাতে ব্যবহারের সাইজ কাস্টমাইজ করুন",
+            subtitle = "কী-বোর্ডের সারি, উচ্চতা, নম্বর সারি ও এক হাতে ব্যবহারের সাইজ কাস্টমাইজ করুন",
             badgeText = "CUSTOMIZE",
             icon = { Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White) }
         )
-
-        HandwritingFontSettingsCard(settingsManager = settingsManager)
 
         ElevatedCard(
             shape = RoundedCornerShape(20.dp),

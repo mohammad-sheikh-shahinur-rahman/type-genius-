@@ -117,9 +117,9 @@ fun FancyFontsPanel(
                 Text(
                     text = when {
                         activeStyle == FancyFontStyle.NORMAL ->
-                            "যেকোনো ফন্ট বা হাতের লেখা বেছে লিখুন • সাথে সাথে আউটপুট হবে"
+                            "যেকোনো ফন্ট বেছে সরাসরি লিখুন • ব্রাউজার, ফেসবুক, মেসেঞ্জারে সরাসরি টেক্সট যাবে"
                         activeStyle.isHandwritingFont ->
-                            "সক্রিয়: ${if (activeStyle == FancyFontStyle.HANDWRITING_CUSTOM && customFontName.isNotBlank()) customFontName else activeStyle.displayName}"
+                            "ডিরেক্ট টেক্সট মোড (${if (activeStyle == FancyFontStyle.HANDWRITING_CUSTOM && customFontName.isNotBlank()) customFontName else activeStyle.displayName}) • ইংরেজি কার্সিভ যাবে"
                         else -> "সক্রিয় ফন্ট: ${activeStyle.displayName}"
                     },
                     color = colors.accent,
@@ -243,8 +243,14 @@ fun FancyFontsPanel(
                 val preview = remember(style, previewSeed, isCustomHw, hasCustomHandwriting) {
                     when {
                         style.isHandwritingFont -> {
-                            if (previewSeed.any { it in '\u0980'..'\u09FF' }) previewSeed
-                            else "আমার হাতের লেখা • $previewSeed"
+                            val baseSeed = if (previewSeed.any { it in '\u0980'..'\u09FF' } && previewSeed.any { it in 'a'..'z' || it in 'A'..'Z' }) {
+                                previewSeed
+                            } else if (previewSeed.any { it in '\u0980'..'\u09FF' }) {
+                                "$previewSeed • TypeGenius"
+                            } else {
+                                "আমার লেখা • $previewSeed"
+                            }
+                            UnicodeTextStyler.styleText(baseSeed, style)
                         }
                         style.supportsAllScripts -> UnicodeTextStyler.styleText(previewSeed, style)
                         else -> {
@@ -354,23 +360,46 @@ fun FancyFontsPanel(
                                 }
                             }
                         } else if (style.isHandwritingFont) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(colors.accent.copy(alpha = 0.16f))
-                                    .clickable {
-                                        onHaptic()
-                                        onSendStyleCard(style)
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                                    .testTag("fancy_font_send_card_${style.id}")
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colors.keySpecialBackground)
+                                        .clickable {
+                                            onHaptic()
+                                            onTransformLastWord(style)
+                                        }
+                                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                                        .testTag("fancy_font_restyle_${style.id}")
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = colors.accent, modifier = Modifier.size(12.dp))
-                                    Text("হাতের লেখায় পাঠান", color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "টেক্সট",
+                                        color = colors.accent,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colors.accent.copy(alpha = 0.16f))
+                                        .clickable {
+                                            onHaptic()
+                                            onSendStyleCard(style)
+                                        }
+                                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                                        .testTag("fancy_font_send_card_${style.id}")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "কার্ড", tint = colors.accent, modifier = Modifier.size(11.dp))
+                                        Text("কার্ড", color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         } else {

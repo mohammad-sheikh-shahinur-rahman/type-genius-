@@ -962,23 +962,31 @@ private fun EnhancedVoiceBar(
                 )
             }
 
+            val voiceLangLabel = voiceController?.activeVoiceBadgeLabel() ?: languageLabel
+            val isOfflinePriority = voiceController?.preferOffline ?: true
+            val offlineMissing = voiceController?.offlineModelMissing == true
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(colors.accent.copy(alpha = 0.16f))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                    .clickable(enabled = voiceController != null) {
+                        voiceController?.toggleBanglaEnglishVoice()
+                    }
+                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                    .testTag("voice_lang_switch_pill"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = languageLabel,
+                    text = "$voiceLangLabel ⇄",
                     color = colors.accent,
-                    fontSize = 11.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
 
             VoiceWaveformEqualizer(
                 isListening = isListening,
@@ -988,13 +996,17 @@ private fun EnhancedVoiceBar(
                 accentColor = if (hasError) Color(0xFFEF5350) else colors.accent
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(enabled = voiceController?.permissionMissing == true) {
-                        onOpenSettings()
+                    .clickable(enabled = voiceController?.permissionMissing == true || offlineMissing) {
+                        if (voiceController?.permissionMissing == true) {
+                            onOpenSettings()
+                        } else if (offlineMissing) {
+                            voiceController?.downloadOfflineVoicePackOrOpenSettings()
+                        }
                     },
                 verticalArrangement = Arrangement.Center
             ) {
@@ -1008,13 +1020,60 @@ private fun EnhancedVoiceBar(
                     Text(
                         text = text,
                         color = if (hasError) Color(0xFFEF5350) else colors.textPrimary,
-                        fontSize = if (partial.isNotBlank()) 13.5.sp else 12.5.sp,
+                        fontSize = if (partial.isNotBlank()) 13.5.sp else 11.5.sp,
                         fontWeight = if (partial.isNotBlank() || isListening) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+
+            if (offlineMissing && voiceController != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFE65100).copy(alpha = 0.22f))
+                        .clickable { voiceController.downloadOfflineVoicePackOrOpenSettings() }
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                        .testTag("voice_download_offline_pack"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "প্যাক নামান",
+                        color = Color(0xFFFFB74D),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
+            // Offline priority toggle pill (Offline on-device vs Online/Auto)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (isOfflinePriority) Color(0xFF00C853).copy(alpha = 0.18f)
+                        else colors.keySpecialBackground
+                    )
+                    .clickable(enabled = voiceController != null) {
+                        voiceController?.togglePreferOffline()
+                    }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                    .testTag("voice_offline_toggle"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isOfflinePriority) "অফলাইন" else "অনলাইন",
+                    color = if (isOfflinePriority) Color(0xFF00E676) else colors.textSecondary,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
 
             // Continuous mode toggle pill (Auto-continue vs Single phrase)
             Box(
@@ -1027,14 +1086,14 @@ private fun EnhancedVoiceBar(
                     .clickable(enabled = voiceController != null) {
                         voiceController?.toggleContinuousMode()
                     }
-                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
                     .testTag("voice_continuous_toggle"),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (isContinuous) "Auto ∞" else "1×",
                     color = if (isContinuous) colors.accent else colors.textSecondary,
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )

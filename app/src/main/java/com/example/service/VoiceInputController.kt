@@ -4,12 +4,17 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,7 +38,7 @@ class VoiceInputController(private val context: Context) {
     var isProcessing by mutableStateOf(false)
         private set
 
-    var statusText by mutableStateOf("Speak now")
+    var statusText by mutableStateOf("এখন বলুন...")
         private set
 
     var partialText by mutableStateOf("")
@@ -48,12 +53,31 @@ class VoiceInputController(private val context: Context) {
     var hasError by mutableStateOf(false)
         private set
 
+    /**
+     * When true, TypeGenius prioritizes on-device / offline speech recognition packs
+     * so voice typing works smoothly without internet for Bangla & English.
+     */
+    var preferOffline by mutableStateOf(true)
+        private set
+
+    var isUsingOfflineEngine by mutableStateOf(false)
+        private set
+
+    var isDeviceOffline by mutableStateOf(false)
+        private set
+
+    var offlineModelMissing by mutableStateOf(false)
+        private set
+
+    var activeVoiceLanguageCode by mutableStateOf("bn")
+        private set
+
     private var speechRecognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isSessionDesired = false
     private var hardErrorStreak = 0
+    private var onDeviceRetryBypassed = false
     private var lastCyclePartial = ""
-    private var activeLanguageCode = "bn"
     private var activeOnPermissionRequired: () -> Unit = {}
     private var activeOnTextRecognized: (String) -> Unit = {}
 
@@ -64,10 +88,66 @@ class VoiceInputController(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun isNetworkConnected(): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return true
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (_: Exception) {
+            // In Robolectric or restricted sandboxes, avoid false-offline failures unless verifiable
+            true
+        }
+    }
+
+    fun isOnDeviceEngineAvailable(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(context) }.getOrDefault(false)
+    }
+
+    fun activeVoiceBadgeLabel(): String {
+        val code = activeVoiceLanguageCode.lowercase()
+        return when {
+            code == "banglish" || code.startsWith("bn") || code == "syl" || code == "as" -> "বাংলা"
+            code.startsWith("hi") -> "हिन्दी"
+            code.startsWith("ar") -> "العربية"
+            code.startsWith("ur") -> "اردو"
+            code.startsWith("fa") -> "فارسی"
+            else -> "EN"
+        }
+    }
+
     fun toggleContinuousMode() {
         continuousMode = !continuousMode
         if (isSessionDesired) {
-            statusText = if (continuousMode) "Listening continuously (1-tap)" else "Listening..."
+            statusText = buildListeningPrompt()
+        }
+    }
+
+    fun togglePreferOffline() {
+        preferOffline = !preferOffline
+        onDeviceRetryBypassed = false
+        offlineModelMissing = false
+        if (isSessionDesired) {
+            mainHandler.removeCallbacksAndMessages(null)
+            mainHandler.post { launchRecognizerCycle() }
+        }
+    }
+
+    fun toggleBanglaEnglishVoice() {
+        val next = if (activeVoiceLanguageCode.startsWith("bn") || activeVoiceLanguageCode == "banglish" || activeVoiceLanguageCode == "syl") {
+            "en"
+        } else {
+            "bn"
+        }
+        activeVoiceLanguageCode = next
+        onDeviceRetryBypassed = false
+        offlineModelMissing = false
+        if (isSessionDesired) {
+            mainHandler.removeCallbacksAndMessages(null)
+            mainHandler.post { launchRecognizerCycle() }
         }
     }
 
@@ -88,15 +168,86 @@ class VoiceInputController(private val context: Context) {
         onPermissionRequired: () -> Unit = {},
         onTextRecognized: (String) -> Unit
     ) {
-        activeLanguageCode = languageCode
+        activeVoiceLanguageCode = languageCode
         activeOnPermissionRequired = onPermissionRequired
         activeOnTextRecognized = onTextRecognized
         isSessionDesired = true
         isSessionDesiredState = true
         hardErrorStreak = 0
+        onDeviceRetryBypassed = false
+        offlineModelMissing = false
         lastCyclePartial = ""
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.post { launchRecognizerCycle() }
+    }
+
+    fun downloadOfflineVoicePackOrOpenSettings() {
+        val langTag = resolveLanguageTag(activeVoiceLanguageCode)
+        var downloadTriggered = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && isOnDeviceEngineAvailable()) {
+            runCatching {
+                val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                val intent = createSpeechIntent(langTag, forceOffline = true)
+                recognizer.triggerModelDownload(intent)
+                recognizer.destroy()
+                downloadTriggered = true
+            }
+        }
+        if (downloadTriggered) {
+            Toast.makeText(
+                context,
+                "$langTag অফলাইন ভয়েস প্যাক ডাউনলোড হচ্ছে (Google Voice Settings)...",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        // Fallback: open Google Voice Search / Offline Speech Recognition Settings
+        val candidateActions = listOf(
+            "com.google.android.voicesearch.INSTALL_OFFLINE_SPEECH_PACKS",
+            Settings.ACTION_VOICE_INPUT_SETTINGS,
+            Settings.ACTION_INPUT_METHOD_SETTINGS,
+            Settings.ACTION_SETTINGS
+        )
+        for (action in candidateActions) {
+            val started = runCatching {
+                val intent = Intent(action).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (started) {
+                Toast.makeText(
+                    context,
+                    "অফলাইনে বাংলা ও English বলতে Offline Speech Pack ডাউনলোড করুন",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+        }
+    }
+
+    private fun buildListeningPrompt(): String {
+        val lang = activeVoiceBadgeLabel()
+        return when {
+            isUsingOfflineEngine -> "অফলাইনে শুনছি ($lang)..."
+            continuousMode -> "শুনছি ($lang • Auto)..."
+            else -> "এখন বলুন ($lang)..."
+        }
+    }
+
+    private fun createSpeechIntent(langTag: String, forceOffline: Boolean): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, forceOffline)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 12000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2800L)
+        }
     }
 
     private fun scheduleNextCycle(delayMs: Long) {
@@ -139,7 +290,7 @@ class VoiceInputController(private val context: Context) {
             rmsLevel = 0f
             partialText = ""
             lastCyclePartial = ""
-            statusText = "Allow Microphone Permission"
+            statusText = "মাইক্রোফোন অনুমতি দিন"
             activeOnPermissionRequired()
             return
         }
@@ -149,168 +300,213 @@ class VoiceInputController(private val context: Context) {
         lastCyclePartial = ""
         rmsLevel = 0f
 
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+        val online = isNetworkConnected()
+        isDeviceOffline = !online
+        val useOnDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !onDeviceRetryBypassed &&
+            (preferOffline || !online) &&
+            isOnDeviceEngineAvailable()
+
+        val standardAvailable = SpeechRecognizer.isRecognitionAvailable(context)
+        if (!useOnDevice && !standardAvailable) {
             isSessionDesired = false
             isSessionDesiredState = false
-            statusText = "Voice input unavailable on device"
+            statusText = "এই ডিভাইসে ভয়েস সার্ভিস পাওয়া যায়নি"
             isListening = false
             isProcessing = false
             hasError = true
             return
         }
 
+        val usedOnDeviceThisCycle = useOnDevice
+        isUsingOfflineEngine = usedOnDeviceThisCycle || preferOffline || !online
+        val langTag = resolveLanguageTag(activeVoiceLanguageCode)
+
         try {
             teardownRecognizer()
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        isListening = true
-                        isProcessing = false
-                        hasError = false
-                        partialText = ""
-                        statusText = if (continuousMode) "Listening continuously..." else "Speak now"
-                    }
+            val recognizer = if (usedOnDeviceThisCycle && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            }
 
-                    override fun onBeginningOfSpeech() {
-                        hardErrorStreak = 0
-                        isProcessing = false
-                        statusText = "Listening..."
-                    }
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isListening = true
+                    isProcessing = false
+                    hasError = false
+                    offlineModelMissing = false
+                    partialText = ""
+                    statusText = buildListeningPrompt()
+                }
 
-                    override fun onRmsChanged(rmsdB: Float) {
-                        val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
-                        rmsLevel = (rmsLevel * 0.40f) + (normalized * 0.60f)
-                    }
+                override fun onBeginningOfSpeech() {
+                    hardErrorStreak = 0
+                    isProcessing = false
+                    statusText = if (usedOnDeviceThisCycle) "অফলাইন রেকর্ড হচ্ছে..." else "শুনছি..."
+                }
 
-                    override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onRmsChanged(rmsdB: Float) {
+                    val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                    rmsLevel = (rmsLevel * 0.40f) + (normalized * 0.60f)
+                }
 
-                    override fun onEndOfSpeech() {
-                        isProcessing = true
-                        rmsLevel = 0.18f
-                        statusText = "Processing..."
-                    }
+                override fun onBufferReceived(buffer: ByteArray?) {}
 
-                    override fun onError(error: Int) {
-                        val isPermissionError = error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
-                        val isSilentOrIdleError = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
-                            error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-                            error == SpeechRecognizer.ERROR_CLIENT
-                        val isRecoverableSystemError = error == SpeechRecognizer.ERROR_AUDIO ||
-                            error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
-                            error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
-                            error == SpeechRecognizer.ERROR_NETWORK
+                override fun onEndOfSpeech() {
+                    isProcessing = true
+                    rmsLevel = 0.18f
+                    statusText = "প্রসেস হচ্ছে..."
+                }
 
-                        if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                            flushPartialIfUncommitted()
-                        } else {
-                            lastCyclePartial = ""
-                        }
+                override fun onError(error: Int) {
+                    val isPermissionError = error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
+                    val isLanguageOrOfflineUnavailable =
+                        error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                            error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
+                    val isSilentOrIdleError = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                        error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                        error == SpeechRecognizer.ERROR_CLIENT
+                    val isRecoverableSystemError = error == SpeechRecognizer.ERROR_AUDIO ||
+                        error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
+                        error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
+                        error == SpeechRecognizer.ERROR_NETWORK
 
-                        if (!isPermissionError && isSessionDesired && continuousMode) {
-                            if (isSilentOrIdleError) {
-                                hardErrorStreak = 0
-                                isListening = true
-                                isProcessing = false
-                                hasError = false
-                                rmsLevel = 0f
-                                partialText = ""
-                                statusText = "Listening continuously..."
-                                val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) 380L else 240L
-                                scheduleNextCycle(delay)
-                                return
-                            }
-                            if (isRecoverableSystemError && hardErrorStreak < 6) {
-                                hardErrorStreak++
-                                isListening = true
-                                isProcessing = false
-                                hasError = false
-                                rmsLevel = 0f
-                                partialText = ""
-                                statusText = "Reconnecting mic..."
-                                scheduleNextCycle(520L)
-                                return
-                            }
-                        }
-
-                        isSessionDesired = false
-                        isSessionDesiredState = false
-                        isListening = false
-                        isProcessing = false
-                        rmsLevel = 0f
-                        hasError = true
-                        partialText = ""
+                    if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                        flushPartialIfUncommitted()
+                    } else {
                         lastCyclePartial = ""
-                        statusText = when (error) {
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                                permissionMissing = true
-                                "Allow Microphone Permission"
-                            }
-                            SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch that — tap mic"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech heard — tap mic"
-                            SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Check connection or offline pack"
-                            else -> "Tap mic to speak again"
-                        }
                     }
 
-                    override fun onResults(results: Bundle?) {
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val committed = matches?.firstOrNull()?.trim().orEmpty()
-                        if (committed.isNotEmpty()) {
-                            hardErrorStreak = 0
-                            lastCyclePartial = ""
-                            activeOnTextRecognized(committed)
-                        } else {
-                            flushPartialIfUncommitted()
-                        }
-                        isProcessing = false
-                        hasError = false
-                        rmsLevel = 0f
-                        partialText = ""
-
-                        if (isSessionDesired && continuousMode) {
-                            isListening = true
-                            statusText = "Listening continuously..."
-                            scheduleNextCycle(260L)
-                        } else {
+                    // If OnDevice failed because this OEM's offline pack isn't installed yet:
+                    // - If online, seamlessly fall back to standard SpeechRecognizer.
+                    // - If offline, show explicit 1-tap Offline Pack Download prompt!
+                    if (usedOnDeviceThisCycle && (isLanguageOrOfflineUnavailable || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_NETWORK)) {
+                        if (isNetworkConnected() && standardAvailable && !onDeviceRetryBypassed) {
+                            onDeviceRetryBypassed = true
+                            isUsingOfflineEngine = false
+                            scheduleNextCycle(160L)
+                            return
+                        } else if (isLanguageOrOfflineUnavailable) {
                             isSessionDesired = false
                             isSessionDesiredState = false
                             isListening = false
-                            statusText = if (committed.isNotEmpty()) "Tap mic to speak more" else "Tap mic to speak"
+                            isProcessing = false
+                            rmsLevel = 0f
+                            hasError = true
+                            offlineModelMissing = true
+                            partialText = ""
+                            statusText = "${activeVoiceBadgeLabel()} অফলাইন প্যাক নামান"
+                            return
                         }
                     }
 
-                    override fun onPartialResults(partialResults: Bundle?) {
-                        val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val partial = matches?.firstOrNull()?.trim().orEmpty()
-                        if (partial.isNotEmpty()) {
+                    if (!isPermissionError && isSessionDesired && continuousMode) {
+                        if (isSilentOrIdleError) {
                             hardErrorStreak = 0
-                            lastCyclePartial = partial
-                            partialText = partial
-                            statusText = partial
+                            isListening = true
+                            isProcessing = false
+                            hasError = false
+                            rmsLevel = 0f
+                            partialText = ""
+                            statusText = buildListeningPrompt()
+                            val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) 380L else 240L
+                            scheduleNextCycle(delay)
+                            return
+                        }
+                        if (isRecoverableSystemError && hardErrorStreak < 6) {
+                            hardErrorStreak++
+                            isListening = true
+                            isProcessing = false
+                            hasError = false
+                            rmsLevel = 0f
+                            partialText = ""
+                            statusText = "মাইক পুনরায় সংযোগ হচ্ছে..."
+                            scheduleNextCycle(520L)
+                            return
                         }
                     }
 
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
-            }
+                    isSessionDesired = false
+                    isSessionDesiredState = false
+                    isListening = false
+                    isProcessing = false
+                    rmsLevel = 0f
+                    hasError = true
+                    partialText = ""
+                    lastCyclePartial = ""
+                    statusText = when (error) {
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                            permissionMissing = true
+                            "মাইক্রোফোন অনুমতি দিন"
+                        }
+                        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,
+                        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> {
+                            offlineModelMissing = true
+                            "${activeVoiceBadgeLabel()} অফলাইন প্যাক নামান"
+                        }
+                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
+                            offlineModelMissing = true
+                            "নেট নেই — অফলাইন প্যাক নামান"
+                        }
+                        SpeechRecognizer.ERROR_NO_MATCH -> "শোনা যায়নি — আবার মাইক চাপুন"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "কোনো কথা শোনা যায়নি — মাইক চাপুন"
+                        else -> "আবার বলতে মাইক চাপুন"
+                    }
+                }
 
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                val langTag = resolveLanguageTag(activeLanguageCode)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 12000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4500L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2800L)
-            }
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val committed = matches?.firstOrNull()?.trim().orEmpty()
+                    if (committed.isNotEmpty()) {
+                        hardErrorStreak = 0
+                        offlineModelMissing = false
+                        lastCyclePartial = ""
+                        activeOnTextRecognized(committed)
+                    } else {
+                        flushPartialIfUncommitted()
+                    }
+                    isProcessing = false
+                    hasError = false
+                    rmsLevel = 0f
+                    partialText = ""
 
-            speechRecognizer?.startListening(intent)
+                    if (isSessionDesired && continuousMode) {
+                        isListening = true
+                        statusText = buildListeningPrompt()
+                        scheduleNextCycle(260L)
+                    } else {
+                        isSessionDesired = false
+                        isSessionDesiredState = false
+                        isListening = false
+                        statusText = if (committed.isNotEmpty()) "আরও বলতে মাইক চাপুন" else "বলতে মাইক চাপুন"
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val partial = matches?.firstOrNull()?.trim().orEmpty()
+                    if (partial.isNotEmpty()) {
+                        hardErrorStreak = 0
+                        lastCyclePartial = partial
+                        partialText = partial
+                        statusText = partial
+                    }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+
+            speechRecognizer = recognizer
+            val intent = createSpeechIntent(
+                langTag = langTag,
+                forceOffline = preferOffline || !online
+            )
+            recognizer.startListening(intent)
             isListening = true
             isProcessing = false
-            statusText = if (continuousMode) "Listening continuously..." else "Speak now"
+            statusText = buildListeningPrompt()
         } catch (_: SecurityException) {
             isSessionDesired = false
             isSessionDesiredState = false
@@ -320,10 +516,13 @@ class VoiceInputController(private val context: Context) {
             hasError = true
             rmsLevel = 0f
             lastCyclePartial = ""
-            statusText = "Allow Microphone Permission"
+            statusText = "মাইক্রোফোন অনুমতি দিন"
             activeOnPermissionRequired()
         } catch (_: Exception) {
-            if (isSessionDesired && continuousMode && hardErrorStreak < 4) {
+            if (usedOnDeviceThisCycle && standardAvailable && !onDeviceRetryBypassed) {
+                onDeviceRetryBypassed = true
+                scheduleNextCycle(180L)
+            } else if (isSessionDesired && continuousMode && hardErrorStreak < 4) {
                 hardErrorStreak++
                 scheduleNextCycle(450L)
             } else {
@@ -334,12 +533,12 @@ class VoiceInputController(private val context: Context) {
                 hasError = true
                 rmsLevel = 0f
                 lastCyclePartial = ""
-                statusText = "Tap mic to speak again"
+                statusText = "আবার বলতে মাইক চাপুন"
             }
         }
     }
 
-    private fun resolveLanguageTag(languageCode: String): String {
+    internal fun resolveLanguageTag(languageCode: String): String {
         return when {
             languageCode == "banglish" || languageCode.startsWith("bn") || languageCode == "syl" || languageCode == "as" -> "bn-BD"
             languageCode.startsWith("hi") || languageCode == "ne" -> "hi-IN"
@@ -372,7 +571,7 @@ class VoiceInputController(private val context: Context) {
             rmsLevel = 0f
             partialText = ""
             lastCyclePartial = ""
-            statusText = "Speak now"
+            statusText = "এখন বলুন..."
         }
     }
 

@@ -761,9 +761,15 @@ class ExampleUnitTest {
         assertEquals(FancyFontStyle.HANDWRITING_ATMA, FancyFontStyle.fromHandwritingPresetId("atma"))
         assertEquals(FancyFontStyle.HANDWRITING_GALADA, FancyFontStyle.fromHandwritingPresetId("galada"))
 
-        val hwText = "আমার হাতের লেখা 2026"
-        assertEquals(hwText, UnicodeTextStyler.styleText(hwText, FancyFontStyle.HANDWRITING_ATMA))
-        assertEquals(hwText, UnicodeTextStyler.styleSingleInput(hwText, FancyFontStyle.HANDWRITING_CUSTOM))
+        val hwText = "আমার হাতের লেখা Type 2026"
+        val atmaStyled = UnicodeTextStyler.styleText(hwText, FancyFontStyle.HANDWRITING_ATMA)
+        assertTrue(atmaStyled.startsWith("আমার হাতের লেখা "))
+        assertTrue(atmaStyled != hwText)
+        assertEquals(hwText, UnicodeTextStyler.unstyleToPlain(atmaStyled))
+
+        val galadaStyled = UnicodeTextStyler.styleSingleInput("Hi", FancyFontStyle.HANDWRITING_GALADA)
+        assertEquals("𝓗𝓲", galadaStyled)
+        assertEquals("আ", UnicodeTextStyler.styleSingleInput("আ", FancyFontStyle.HANDWRITING_CUSTOM))
 
         // Verify italic/script/fraktur styles transform digits too and unstyle back cleanly
         val italicDigits = UnicodeTextStyler.styleText("Abc 123", FancyFontStyle.ITALIC_SANS)

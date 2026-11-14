@@ -548,14 +548,14 @@ fun KeyboardView(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = handwritingLiveText.ifBlank { "হাতের লেখায় পাঠাতে লিখুন..." },
+                            text = handwritingLiveText.ifBlank { "সরাসরি টাইপে ইংরেজি কার্সিভ (𝒜𝒷𝒸) যাবে; বাংলা .ttf কার্ড চাইলে ডানদিকে চাপুন" },
                             fontFamily = activeKeyboardFontFamily,
                             color = if (handwritingLiveText.isBlank()) {
-                                Color(selectedPaperTheme.inkColor).copy(alpha = 0.5f)
+                                Color(selectedPaperTheme.inkColor).copy(alpha = 0.62f)
                             } else {
                                 Color(selectedPaperTheme.inkColor)
                             },
-                            fontSize = 15.5.sp,
+                            fontSize = if (handwritingLiveText.isBlank()) 10.5.sp else 15.5.sp,
                             maxLines = 2,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
@@ -628,7 +628,7 @@ fun KeyboardView(
                             .testTag("handwriting_send_image_btn")
                     ) {
                         Text(
-                            text = if (selectedCardFormat == HandwritingCardFormat.PORTRAIT_LETTER) "✉️ চিঠি" else "✍️ পাঠান",
+                            text = if (selectedCardFormat == HandwritingCardFormat.PORTRAIT_LETTER) "✉️ চিঠি" else "🖼️ কার্ড",
                             color = Color.White,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
