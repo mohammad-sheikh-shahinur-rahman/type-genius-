@@ -12,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "learned_words")
@@ -27,7 +29,9 @@ data class ClipboardItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val content: String,
     val isPinned: Boolean = false,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isSensitive: Boolean = false,
+    val expiresAt: Long? = null
 )
 
 @Entity(tableName = "translation_memory")
@@ -63,11 +67,17 @@ interface WordDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(word: LearnedWord)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(words: List<LearnedWord>)
+
     @Query("UPDATE learned_words SET frequency = frequency + 1, lastUsed = :now WHERE word = :word AND language = :lang")
     suspend fun incrementFrequency(word: String, lang: String, now: Long = System.currentTimeMillis())
 
     @Query("SELECT * FROM learned_words ORDER BY frequency DESC, lastUsed DESC LIMIT 200")
     fun getAllLearnedWords(): Flow<List<LearnedWord>>
+
+    @Query("SELECT * FROM learned_words ORDER BY frequency DESC, lastUsed DESC")
+    suspend fun getAllLearnedWordsList(): List<LearnedWord>
 
     @Query("DELETE FROM learned_words WHERE word = :word")
     suspend fun deleteWord(word: String)
@@ -81,6 +91,9 @@ interface ClipboardDao {
     @Query("SELECT * FROM clipboard_items ORDER BY isPinned DESC, timestamp DESC LIMIT 50")
     fun getAllItems(): Flow<List<ClipboardItem>>
 
+    @Query("SELECT * FROM clipboard_items WHERE content = :content LIMIT 1")
+    suspend fun findByContent(content: String): ClipboardItem?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: ClipboardItem): Long
 
@@ -92,6 +105,12 @@ interface ClipboardDao {
 
     @Query("DELETE FROM clipboard_items WHERE isPinned = 0")
     suspend fun clearUnpinned()
+
+    @Query("DELETE FROM clipboard_items")
+    suspend fun clearAll()
+
+    @Query("DELETE FROM clipboard_items WHERE expiresAt IS NOT NULL AND expiresAt <= :now AND isPinned = 0")
+    suspend fun deleteExpired(now: Long = System.currentTimeMillis()): Int
 }
 
 @Dao
@@ -126,6 +145,9 @@ interface ShortcutDao {
     @Query("SELECT * FROM text_shortcuts ORDER BY trigger ASC")
     fun observeAll(): Flow<List<TextShortcut>>
 
+    @Query("SELECT * FROM text_shortcuts ORDER BY trigger ASC")
+    suspend fun getAllList(): List<TextShortcut>
+
     @Query("SELECT * FROM text_shortcuts WHERE LOWER(trigger) = LOWER(:trigger) LIMIT 3")
     suspend fun findExact(trigger: String): List<TextShortcut>
 
@@ -147,7 +169,7 @@ interface ShortcutDao {
 
 @Database(
     entities = [LearnedWord::class, ClipboardItem::class, TranslationMemoryEntry::class, TextShortcut::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class TypeGeniusDatabase : RoomDatabase() {
@@ -160,13 +182,23 @@ abstract class TypeGeniusDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: TypeGeniusDatabase? = null
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE clipboard_items ADD COLUMN isSensitive INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE clipboard_items ADD COLUMN expiresAt INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): TypeGeniusDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     TypeGeniusDatabase::class.java,
                     "typegenius_local.db"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .addMigrations(MIGRATION_3_4)
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

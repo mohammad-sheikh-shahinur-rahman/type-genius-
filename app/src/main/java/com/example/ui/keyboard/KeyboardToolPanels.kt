@@ -27,12 +27,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EventNote
@@ -47,9 +49,12 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -72,6 +78,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.BengaliCalendarUtils
 import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardHeightPreset
@@ -79,86 +86,461 @@ import com.example.model.KeyboardTheme
 import com.example.model.KeyboardToolId
 import com.example.model.KeyboardViewMode
 import com.example.model.OneHandedMode
+import com.example.model.SoundProfile
+import kotlin.math.roundToInt
 
+/**
+ * সুন্দর ও আধুনিক Material 3 নাম্বার প্যাড (বাংলা ↔ English সংখ্যা টগল + কারেন্সি/অপারেটর রিবন)।
+ */
 @Composable
 fun NumpadPanel(
     colors: KeyboardColors,
+    isBengaliDefault: Boolean = true,
     onKeyAction: (KeyAction) -> Unit,
     onBackToLetters: () -> Unit,
     onHaptic: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val rows = listOf(
-        listOf("1", "2", "3", "-"),
-        listOf("4", "5", "6", "+"),
-        listOf("7", "8", "9", "⌫"),
-        listOf("ABC", ",", "0", ".", "↵")
+    var useBanglaDigits by remember(isBengaliDefault) { mutableStateOf(isBengaliDefault) }
+
+    val quickSymbols = listOf("৳", "$", "%", "(", ")", "=", ",", ":")
+    val bnGrid = listOf(
+        listOf("১" to "1", "২" to "2", "৩" to "3", "÷" to null),
+        listOf("৪" to "4", "৫" to "5", "৬" to "6", "×" to null),
+        listOf("৭" to "7", "৮" to "8", "৯" to "9", "-" to null),
+        listOf("." to null, "০" to "0", "০০" to "00", "+" to null)
     )
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.background)
-            .padding(horizontal = 6.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        rows.forEach { row ->
+        // Top Utility Ribbon: Bangla/English Script Toggle + Currency & Math Chips
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.accent.copy(alpha = 0.18f))
+                    .border(1.dp, colors.accent.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .clickable {
+                        onHaptic()
+                        useBanglaDigits = !useBanglaDigits
+                    }
+                    .padding(horizontal = 9.dp, vertical = 6.dp)
+                    .testTag("numpad_script_toggle")
+            ) {
+                Text(
+                    text = if (useBanglaDigits) "১২৩ → 123" else "123 → ১২৩",
+                    color = colors.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                row.forEach { label ->
-                    val type = when (label) {
-                        "⌫" -> KeyType.BACKSPACE
-                        "↵" -> KeyType.ENTER
-                        "ABC" -> KeyType.MODE_SWITCH
-                        else -> KeyType.CHARACTER
-                    }
-                    val isEnter = type == KeyType.ENTER
-                    val isSpecial = type != KeyType.CHARACTER
+                quickSymbols.forEach { sym ->
                     Box(
                         modifier = Modifier
-                            .weight(if (label == "0") 1.3f else 1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                when {
-                                    isEnter -> colors.enterKeyBackground
-                                    isSpecial -> colors.keySpecialBackground
-                                    else -> colors.keyBackground
-                                }
-                            )
-                            .testTag("numpad_$label")
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(colors.keySpecialBackground)
                             .clickable {
                                 onHaptic()
-                                if (label == "ABC") onBackToLetters()
-                                else onKeyAction(KeyAction(label, null, type))
-                            },
-                        contentAlignment = Alignment.Center
+                                onKeyAction(KeyAction(sym, null, KeyType.CHARACTER))
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("numpad_quick_$sym")
                     ) {
                         Text(
-                            text = label,
-                            color = if (isEnter) colors.enterKeyText else colors.textPrimary,
-                            fontSize = if (label == "ABC") 14.sp else 20.sp,
+                            text = sym,
+                            color = colors.textPrimary,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
         }
+
+        // Main 4x4 Digits + Right Action Column
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(212.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            // Left 4 Columns (3 digit cols + 1 operator col)
+            Column(
+                modifier = Modifier
+                    .weight(4f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                bnGrid.forEach { row ->
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        row.forEach { (bnLabel, enAlt) ->
+                            val primary = if (useBanglaDigits || enAlt == null) bnLabel else enAlt
+                            val sub = when {
+                                enAlt == null -> null
+                                useBanglaDigits -> enAlt
+                                else -> bnLabel
+                            }
+                            val isOperator = enAlt == null && bnLabel != "."
+                            val bgColor = if (isOperator) colors.keySpecialBackground else colors.keyBackground
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .shadow(1.dp, RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(bgColor)
+                                    .testTag("numpad_$primary")
+                                    .clickable {
+                                        onHaptic()
+                                        onKeyAction(KeyAction(primary, sub, KeyType.CHARACTER))
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = primary,
+                                        color = if (isOperator) colors.accent else colors.textPrimary,
+                                        fontSize = if (primary.length >= 2) 17.sp else 20.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (sub != null) {
+                                        Text(
+                                            text = sub,
+                                            color = colors.textSecondary.copy(alpha = 0.68f),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right Action Column: Backspace, ABC/অক্ষর, Enter
+            Column(
+                modifier = Modifier
+                    .weight(1.05f)
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .shadow(1.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.keySpecialBackground)
+                        .testTag("numpad_⌫")
+                        .clickable {
+                            onHaptic()
+                            onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE))
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("⌫", color = colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .shadow(1.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.keySpecialBackground)
+                        .testTag("numpad_ABC")
+                        .clickable {
+                            onHaptic()
+                            onBackToLetters()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("অক্ষর", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1.6f)
+                        .fillMaxWidth()
+                        .shadow(2.dp, RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(colors.enterKeyBackground)
+                        .testTag("numpad_↵")
+                        .clickable {
+                            onHaptic()
+                            onKeyAction(KeyAction("↵", null, KeyType.ENTER))
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("↵", color = colors.enterKeyText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 
-/**
- * Matches Screenshot 2 (`Text editing`):
- * Col 1 (tall): [<]
- * Col 2: [^], [Select], [v]
- * Col 3 (tall): [>]
- * Col 4: [Select all], [Copy], [Cut], [Paste]
- * Bottom Row: [|<], [>|], [⌫]
- */
+@Composable
+fun QuickSettingsPanel(
+    colors: KeyboardColors,
+    heightPortraitPct: Int,
+    soundEnabled: Boolean,
+    soundVolume: Float,
+    soundProfile: SoundProfile,
+    oneHandedMode: OneHandedMode,
+    floatingMode: Boolean,
+    isIncognitoMode: Boolean,
+    perAppSmartLanguageEnabled: Boolean,
+    onHeightPctChange: (Int) -> Unit,
+    onToggleSound: (Boolean) -> Unit,
+    onSoundVolumeChange: (Float) -> Unit,
+    onSelectSoundProfile: (SoundProfile) -> Unit,
+    onCycleOneHanded: () -> Unit,
+    onToggleFloating: () -> Unit,
+    onToggleIncognito: () -> Unit,
+    onTogglePerAppSmartLang: () -> Unit,
+    onOpenFullSettings: () -> Unit,
+    onClose: () -> Unit,
+    onHaptic: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(266.dp)
+            .background(colors.background)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Tune, contentDescription = null, tint = colors.accent, modifier = Modifier.size(17.dp))
+                Text(
+                    text = "দ্রুত উচ্চতা ও সাউন্ড সেটিংস",
+                    color = colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(colors.keySpecialBackground)
+                        .clickable {
+                            onHaptic()
+                            onOpenFullSettings()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text("সব সেটিংস", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                IconButton(onClick = { onHaptic(); onClose() }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        // Keyboard Height Slider
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.keyBackground)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("কীবোর্ডের উচ্চতা (Height)", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "${BengaliCalendarUtils.toBengaliDigits(heightPortraitPct.toString())}%",
+                    color = colors.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Slider(
+                value = heightPortraitPct.toFloat().coerceIn(70f, 135f),
+                onValueChange = { onHeightPctChange(it.roundToInt()) },
+                valueRange = 70f..135f,
+                colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
+                modifier = Modifier.height(28.dp).testTag("quick_height_slider")
+            )
+        }
+
+        // Sound Volume Slider & Profiles
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.keyBackground)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = colors.accent, modifier = Modifier.size(15.dp))
+                    Text("কী-সাউন্ড ভলিউম", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (soundEnabled) "${BengaliCalendarUtils.toBengaliDigits((soundVolume * 100).roundToInt().toString())}%" else "বন্ধ",
+                        color = colors.accent,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(if (soundEnabled) colors.accent else colors.keySpecialBackground)
+                            .clickable {
+                                onHaptic()
+                                onToggleSound(!soundEnabled)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("quick_sound_toggle")
+                    ) {
+                        Text(
+                            text = if (soundEnabled) "চালু" else "বন্ধ",
+                            color = if (soundEnabled) Color.White else colors.textSecondary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Slider(
+                value = if (soundEnabled) soundVolume else 0f,
+                onValueChange = { v ->
+                    if (!soundEnabled && v > 0.05f) onToggleSound(true)
+                    onSoundVolumeChange(v)
+                },
+                valueRange = 0f..1f,
+                colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
+                modifier = Modifier.height(28.dp).testTag("quick_sound_slider")
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                SoundProfile.entries.forEach { profile ->
+                    val selected = soundProfile == profile
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(if (selected) colors.accent.copy(alpha = 0.22f) else colors.keySpecialBackground)
+                            .clickable {
+                                onHaptic()
+                                if (!soundEnabled) onToggleSound(true)
+                                onSelectSoundProfile(profile)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = profile.label.substringBefore(" ("),
+                            color = if (selected) colors.accent else colors.textPrimary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        // Ergonomic & Smart Automation Toggles Row
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            QuickModeChip(
+                label = if (floatingMode) "ফ্লোটিং: চালু" else "ফ্লোটিং মোড",
+                active = floatingMode,
+                colors = colors,
+                onClick = { onHaptic(); onToggleFloating() }
+            )
+            QuickModeChip(
+                label = "এক হাতে (${oneHandedMode.label})",
+                active = oneHandedMode != OneHandedMode.FULL,
+                colors = colors,
+                onClick = { onHaptic(); onCycleOneHanded() }
+            )
+            QuickModeChip(
+                label = if (perAppSmartLanguageEnabled) "স্মার্ট অটো-ভাষা: চালু" else "স্মার্ট অটো-ভাষা",
+                active = perAppSmartLanguageEnabled,
+                colors = colors,
+                onClick = { onHaptic(); onTogglePerAppSmartLang() }
+            )
+            QuickModeChip(
+                label = if (isIncognitoMode) "গোপন মোড: চালু" else "গোপন মোড",
+                active = isIncognitoMode,
+                colors = colors,
+                onClick = { onHaptic(); onToggleIncognito() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickModeChip(
+    label: String,
+    active: Boolean,
+    colors: KeyboardColors,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (active) colors.accent.copy(alpha = 0.20f) else colors.keyBackground)
+            .border(
+                width = 1.dp,
+                color = if (active) colors.accent else colors.keySpecialBackground,
+                shape = RoundedCornerShape(9.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text = label,
+            color = if (active) colors.accent else colors.textPrimary,
+            fontSize = 11.sp,
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
+
 @Composable
 fun TextEditorPanel(
     colors: KeyboardColors,
@@ -182,14 +564,12 @@ fun TextEditorPanel(
             .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // 4-Column Main Grid
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(210.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Col 1: Tall Left Arrow (<)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -205,13 +585,12 @@ fun TextEditorPanel(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = "Move Cursor Left",
+                    contentDescription = "বামে নিন",
                     tint = colors.textPrimary,
                     modifier = Modifier.size(26.dp)
                 )
             }
 
-            // Col 2: Up, Select, Down
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -220,7 +599,7 @@ fun TextEditorPanel(
             ) {
                 EditorIconTile(
                     icon = Icons.Default.KeyboardArrowUp,
-                    description = "Move Cursor Up",
+                    description = "উপরে নিন",
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
@@ -229,7 +608,7 @@ fun TextEditorPanel(
                 }
 
                 EditorTextTile(
-                    text = "Select",
+                    text = "নির্বাচন",
                     isHighlighted = selectMode,
                     colors = colors,
                     modifier = Modifier
@@ -243,7 +622,7 @@ fun TextEditorPanel(
 
                 EditorIconTile(
                     icon = Icons.Default.KeyboardArrowDown,
-                    description = "Move Cursor Down",
+                    description = "নিচে নিন",
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 ) {
@@ -252,7 +631,6 @@ fun TextEditorPanel(
                 }
             }
 
-            // Col 3: Tall Right Arrow (>)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -268,13 +646,12 @@ fun TextEditorPanel(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Move Cursor Right",
+                    contentDescription = "ডানে নিন",
                     tint = colors.textPrimary,
                     modifier = Modifier.size(26.dp)
                 )
             }
 
-            // Col 4: Select all, Copy, Cut, Paste
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -282,7 +659,7 @@ fun TextEditorPanel(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 EditorTextTile(
-                    text = "Select all",
+                    text = "সব নির্বাচন",
                     isHighlighted = false,
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("editor_select_all")
@@ -291,7 +668,7 @@ fun TextEditorPanel(
                     onSelectAll()
                 }
                 EditorTextTile(
-                    text = "Copy",
+                    text = "কপি",
                     isHighlighted = false,
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("editor_copy")
@@ -300,7 +677,7 @@ fun TextEditorPanel(
                     onCopy()
                 }
                 EditorTextTile(
-                    text = "Cut",
+                    text = "কাট",
                     isHighlighted = false,
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("editor_cut")
@@ -309,7 +686,7 @@ fun TextEditorPanel(
                     onCut()
                 }
                 EditorTextTile(
-                    text = "Paste",
+                    text = "পেস্ট",
                     isHighlighted = false,
                     colors = colors,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("editor_paste")
@@ -320,7 +697,6 @@ fun TextEditorPanel(
             }
         }
 
-        // Bottom Row: |< , >| , ⌫ (Matches Screenshot 2)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -328,7 +704,7 @@ fun TextEditorPanel(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             EditorTextTile(
-                text = "|<",
+                text = "|< শুরু",
                 isHighlighted = false,
                 colors = colors,
                 isSpecial = true,
@@ -339,7 +715,7 @@ fun TextEditorPanel(
             }
 
             EditorTextTile(
-                text = ">|",
+                text = "শেষ >|",
                 isHighlighted = false,
                 colors = colors,
                 isSpecial = true,
@@ -403,87 +779,108 @@ fun MoreToolsPanel(
     val tools = listOf(
         ToolTile(
             id = KeyboardToolId.TEXT_EDITING,
-            label = "Text editing",
+            label = "টেক্সট এডিট",
             icon = Icons.AutoMirrored.Filled.FormatIndentIncrease,
             testTag = "tool_text_editing",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TEXT_EDITOR) }
         ),
         ToolTile(
             id = KeyboardToolId.GEMINI_AI,
-            label = "TypeGenius AI",
+            label = "বাংলাবিদ AI",
             icon = Icons.Default.AutoAwesome,
             badgeCount = liveGrammarIssueCount,
             testTag = "tool_gemini_ai",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.GEMINI_AI) }
         ),
         ToolTile(
+            id = KeyboardToolId.GIF,
+            label = "GIF",
+            icon = Icons.Default.Gif,
+            testTag = "tool_gif",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.GIF) }
+        ),
+        ToolTile(
             id = KeyboardToolId.STICKERS,
-            label = "Stickers",
+            label = "স্টিকার",
             icon = Icons.Default.Mood,
             testTag = "tool_stickers",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.STICKERS_KAOMOJI) }
         ),
         ToolTile(
-            id = KeyboardToolId.ONE_HANDED,
-            label = if (oneHandedMode == OneHandedMode.FULL) "One-hand" else oneHandedMode.label,
-            icon = Icons.Default.Smartphone,
-            active = oneHandedMode != OneHandedMode.FULL,
-            testTag = "tool_one_handed",
-            onClick = { onHaptic(); onCycleOneHanded() }
-        ),
-        ToolTile(
-            id = KeyboardToolId.FANCY_FONTS,
-            label = "Fancy Fonts",
-            icon = Icons.Default.TextFormat,
-            testTag = "tool_fancy_fonts",
-            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.FANCY_FONTS) }
-        ),
-        ToolTile(
             id = KeyboardToolId.CLIPBOARD,
-            label = "Clipboard",
+            label = "ক্লিপবোর্ড",
             icon = Icons.Default.ContentPaste,
             testTag = "tool_clipboard",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.CLIPBOARD) }
         ),
         ToolTile(
             id = KeyboardToolId.TRANSLATOR,
-            label = "Translate",
+            label = "অনুবাদ",
             icon = Icons.Default.Translate,
             testTag = "tool_translate",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.TRANSLATOR) }
         ),
         ToolTile(
+            id = KeyboardToolId.DEV_MATH,
+            label = "কোড ও গণিত",
+            icon = Icons.Default.Code,
+            testTag = "tool_dev_math",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.DEV_MATH_SYMBOLS) }
+        ),
+        ToolTile(
             id = KeyboardToolId.CALCULATOR,
-            label = "Calculator",
+            label = "ক্যালকুলেটর",
             icon = Icons.Default.Calculate,
             testTag = "tool_calculator",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.CALCULATOR) }
         ),
         ToolTile(
             id = KeyboardToolId.UTILITIES,
-            label = "Notes & Date",
+            label = "তারিখ ও নোট",
             icon = Icons.Default.EventNote,
             testTag = "tool_utilities",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.UTILITIES) }
         ),
         ToolTile(
+            id = KeyboardToolId.FANCY_FONTS,
+            label = "ফন্ট স্টুডিও",
+            icon = Icons.Default.TextFormat,
+            testTag = "tool_fancy_fonts",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.FANCY_FONTS) }
+        ),
+        ToolTile(
             id = KeyboardToolId.THEMES,
-            label = "Themes",
+            label = "থিম",
             icon = Icons.Default.Palette,
             testTag = "tool_themes",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.THEME_PICKER) }
         ),
         ToolTile(
+            id = KeyboardToolId.QUICK_SETTINGS,
+            label = "উচ্চতা ও সাউন্ড",
+            icon = Icons.Default.Tune,
+            testTag = "tool_quick_settings",
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.QUICK_SETTINGS) }
+        ),
+        ToolTile(
             id = KeyboardToolId.INCOGNITO,
-            label = "Incognito",
+            label = "গোপন মোড",
             icon = Icons.Default.VisibilityOff,
             active = isIncognitoMode,
             testTag = "tool_incognito",
             onClick = { onHaptic(); onToggleIncognito() }
         ),
         ToolTile(
+            id = KeyboardToolId.ONE_HANDED,
+            label = if (oneHandedMode == OneHandedMode.FULL) "এক হাতে" else oneHandedMode.label,
+            icon = Icons.Default.Smartphone,
+            active = oneHandedMode != OneHandedMode.FULL,
+            testTag = "tool_one_handed",
+            onClick = { onHaptic(); onCycleOneHanded() }
+        ),
+        ToolTile(
             id = KeyboardToolId.FLOATING,
-            label = if (floatingMode) "Docked" else "Floating",
+            label = if (floatingMode) "ডক করুন" else "ফ্লোটিং",
             icon = Icons.Default.PictureInPictureAlt,
             active = floatingMode,
             testTag = "tool_floating",
@@ -491,43 +888,36 @@ fun MoreToolsPanel(
         ),
         ToolTile(
             id = KeyboardToolId.RESIZE,
-            label = "Size (${heightPreset.label})",
+            label = "সাইজ (${heightPreset.label})",
             icon = Icons.Default.AspectRatio,
             active = heightPreset != KeyboardHeightPreset.NORMAL,
             testTag = "tool_resize",
-            onClick = { onHaptic(); onCycleHeight() }
+            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.QUICK_SETTINGS) }
         ),
         ToolTile(
             id = KeyboardToolId.EMOJI,
-            label = "Emoji",
+            label = "ইমোজি",
             icon = Icons.Default.Mood,
             testTag = "tool_emoji",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.EMOJI) }
         ),
         ToolTile(
-            id = KeyboardToolId.GIF,
-            label = "GIF",
-            icon = Icons.Default.Gif,
-            testTag = "tool_gif",
-            onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.EMOJI) }
-        ),
-        ToolTile(
             id = KeyboardToolId.NUMPAD,
-            label = "Numpad",
+            label = "নাম্বার প্যাড",
             icon = Icons.Default.Dialpad,
             testTag = "tool_numpad",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.NUMPAD) }
         ),
         ToolTile(
             id = KeyboardToolId.SETTINGS,
-            label = "Settings",
+            label = "সেটিংস",
             icon = Icons.Default.Settings,
             testTag = "tool_settings",
             onClick = { onHaptic(); onOpenSettings() }
         ),
         ToolTile(
             id = KeyboardToolId.SHARE,
-            label = "Share",
+            label = "শেয়ার",
             icon = Icons.Default.Share,
             testTag = "tool_share",
             onClick = { onHaptic(); onShareApp() }
@@ -562,7 +952,7 @@ fun MoreToolsPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isDropTargetActive) "Drop here to remove from top bar" else "Hold & drag between bar and panel",
+                    text = if (isDropTargetActive) "টপ বার থেকে সরাতে এখানে ছাড়ুন" else "টুলবারে রাখতে চেপে ধরে টেনে নিন",
                     color = if (isDropTargetActive) colors.accent else colors.textSecondary,
                     fontSize = 11.5.sp,
                     fontWeight = if (isDropTargetActive) FontWeight.Bold else FontWeight.Normal,
@@ -583,7 +973,7 @@ fun MoreToolsPanel(
                         .testTag("tools_reset_toolbar_button")
                 ) {
                     Text(
-                        text = "Reset",
+                        text = "রিসেট",
                         color = colors.accent,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -648,7 +1038,6 @@ fun MoreToolsPanel(
                                     modifier = Modifier.size(21.dp)
                                 )
 
-                                // Top-right badge toggles inclusion in Top Bar (backup to drag-and-drop)
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
@@ -666,7 +1055,7 @@ fun MoreToolsPanel(
                                 ) {
                                     Icon(
                                         imageVector = if (isInTopBar) Icons.Default.Check else Icons.Default.Add,
-                                        contentDescription = if (isInTopBar) "On Top Bar" else "Add to Top Bar",
+                                        contentDescription = if (isInTopBar) "টপ বারে আছে" else "টপ বারে যোগ করুন",
                                         tint = if (isInTopBar) Color.White else colors.textSecondary,
                                         modifier = Modifier.size(10.dp)
                                     )
@@ -693,7 +1082,7 @@ fun MoreToolsPanel(
                             Text(
                                 text = item.label,
                                 color = colors.textSecondary,
-                                fontSize = 11.sp,
+                                fontSize = 10.5.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -732,9 +1121,9 @@ fun InKeyboardThemePanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Themes & Material You", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("থিম ও Material You", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             IconButton(onClick = { onHaptic(); onClose() }, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Close Themes", tint = colors.textSecondary)
+                Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন", tint = colors.textSecondary)
             }
         }
 
@@ -788,7 +1177,7 @@ fun InKeyboardThemePanel(
                                 )
                             }
                             if (selected) {
-                                Icon(Icons.Default.Check, contentDescription = "Selected", tint = preview.accent, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Check, contentDescription = "নির্বাচিত", tint = preview.accent, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -824,7 +1213,7 @@ private fun EditorTextTile(
         Text(
             text = text,
             color = if (isHighlighted) colors.enterKeyText else colors.textPrimary,
-            fontSize = 13.sp,
+            fontSize = 12.5.sp,
             fontWeight = FontWeight.Medium
         )
     }

@@ -1,10 +1,11 @@
 package com.example.data.dictionary
 
 enum class FontCategory(val label: String) {
-    ALL("All"),
-    STYLISH("Stylish"),
-    BOXED("Boxed & Bubble"),
-    BANGLA_DECOR("Bangla & Decor")
+    ALL("সব"),
+    HANDWRITING("✍️ হাতের লেখা"),
+    STYLISH("স্টাইলিশ"),
+    BOXED("বক্স ও বাবল"),
+    BANGLA_DECOR("বাংলা ডেকোর")
 }
 
 enum class FancyFontStyle(
@@ -14,9 +15,37 @@ enum class FancyFontStyle(
     val sample: String,
     val category: FontCategory,
     val isDecoratorFrame: Boolean = false,
-    val supportsAllScripts: Boolean = false
+    val supportsAllScripts: Boolean = false,
+    val isHandwritingFont: Boolean = false
 ) {
-    NORMAL("normal", "Normal (Default)", "Aa", "TypeGenius", FontCategory.ALL),
+    NORMAL("normal", "সাধারণ (Normal)", "Aa", "TypeGenius", FontCategory.ALL),
+    HANDWRITING_CUSTOM(
+        id = "handwriting_custom",
+        displayName = "আমার হাতের লেখা ফন্ট (Custom)",
+        badgeLabel = "✍️ নিজস্ব",
+        sample = "আমার হাতের লেখা",
+        category = FontCategory.HANDWRITING,
+        supportsAllScripts = true,
+        isHandwritingFont = true
+    ),
+    HANDWRITING_ATMA(
+        id = "handwriting_atma",
+        displayName = "বাংলা হাতের লেখা (Atma)",
+        badgeLabel = "✍️ আত্মা",
+        sample = "হাতের লেখা বাংলা",
+        category = FontCategory.HANDWRITING,
+        supportsAllScripts = true,
+        isHandwritingFont = true
+    ),
+    HANDWRITING_GALADA(
+        id = "handwriting_galada",
+        displayName = "বাংলা ক্যালিগ্রাফি (Galada)",
+        badgeLabel = "🖋️ গলাদা",
+        sample = "শৈল্পিক বাংলা লেখা",
+        category = FontCategory.HANDWRITING,
+        supportsAllScripts = true,
+        isHandwritingFont = true
+    ),
     BOLD_SANS("bold_sans", "Bold Sans", "𝗔𝗮", "𝗧𝘆𝗽𝗲𝗚𝗲𝗻𝗶𝘂𝘀", FontCategory.STYLISH),
     ITALIC_SANS("italic_sans", "Italic Sans", "𝘈𝘢", "𝘛𝘺𝘱𝘦𝘎𝘦𝘯𝘪𝘶𝘴", FontCategory.STYLISH),
     BOLD_ITALIC("bold_italic", "Bold Italic", "𝘼𝙖", "𝙏𝙮𝙥𝙚𝙂𝙚𝙣𝙞𝙪𝙨", FontCategory.STYLISH),
@@ -42,8 +71,22 @@ enum class FancyFontStyle(
     DECORATED_ROYAL("decorated_royal", "꧁ Royal Wing ꧂", "꧁꧂", "꧁ বাংলা / Text ꧂", FontCategory.BANGLA_DECOR, isDecoratorFrame = true, supportsAllScripts = true),
     DECORATED_WING("decorated_wing", "★彡 Star Wing 彡★", "★彡", "★彡 বাংলা / Text 彡★", FontCategory.BANGLA_DECOR, isDecoratorFrame = true, supportsAllScripts = true);
 
+    fun handwritingPresetId(): String? = when (this) {
+        HANDWRITING_CUSTOM -> "custom"
+        HANDWRITING_ATMA -> "atma"
+        HANDWRITING_GALADA -> "galada"
+        else -> null
+    }
+
     companion object {
         fun fromId(id: String): FancyFontStyle = entries.find { it.id == id } ?: NORMAL
+
+        fun fromHandwritingPresetId(presetId: String): FancyFontStyle? = when (presetId) {
+            "custom" -> HANDWRITING_CUSTOM
+            "atma" -> HANDWRITING_ATMA
+            "galada" -> HANDWRITING_GALADA
+            else -> null
+        }
     }
 }
 
@@ -76,6 +119,7 @@ object UnicodeTextStyler {
         val map = HashMap<String, Char>(1024)
         val stylesToIndex = FancyFontStyle.entries.filter {
             it != FancyFontStyle.NORMAL &&
+                !it.isHandwritingFont &&
                 !it.isDecoratorFrame &&
                 !it.supportsAllScripts &&
                 it != FancyFontStyle.NEGATIVE_CIRCLED &&
@@ -149,9 +193,13 @@ object UnicodeTextStyler {
 
     fun styleText(input: String, style: FancyFontStyle): String {
         if (input.isEmpty()) return input
-        val normalized = if (style == FancyFontStyle.NORMAL) return unstyleToPlain(input) else unstyleToPlain(input)
+        val normalized = unstyleToPlain(input)
+        if (style == FancyFontStyle.NORMAL || style.isHandwritingFont) return normalized
         return when (style) {
-            FancyFontStyle.NORMAL -> normalized
+            FancyFontStyle.NORMAL,
+            FancyFontStyle.HANDWRITING_CUSTOM,
+            FancyFontStyle.HANDWRITING_ATMA,
+            FancyFontStyle.HANDWRITING_GALADA -> normalized
             FancyFontStyle.DECORATED_STAR -> "✦ $normalized ✦"
             FancyFontStyle.DECORATED_BRACKET -> "【 $normalized 】"
             FancyFontStyle.DECORATED_ROYAL -> "꧁ $normalized ꧂"
@@ -172,9 +220,10 @@ object UnicodeTextStyler {
     /**
      * Used for live per-character typing.
      * Note: Decorator frames do not wrap individual characters; they wrap completed words.
+     * Handwriting fonts output clean plain characters & render in the live handwriting preview/card.
      */
     fun styleSingleInput(token: String, style: FancyFontStyle): String {
-        if (style == FancyFontStyle.NORMAL || token.isEmpty()) return token
+        if (style == FancyFontStyle.NORMAL || style.isHandwritingFont || token.isEmpty()) return token
         if (style.isDecoratorFrame) return token
         return when (style) {
             FancyFontStyle.UNDERLINE -> applyCombiningMarkSafe(token, '\u0332')
@@ -231,6 +280,9 @@ object UnicodeTextStyler {
     private fun mapChar(c: Char, style: FancyFontStyle): String {
         return when (style) {
             FancyFontStyle.NORMAL,
+            FancyFontStyle.HANDWRITING_CUSTOM,
+            FancyFontStyle.HANDWRITING_ATMA,
+            FancyFontStyle.HANDWRITING_GALADA,
             FancyFontStyle.UNDERLINE,
             FancyFontStyle.DOUBLE_UNDERLINE,
             FancyFontStyle.STRIKETHROUGH,
@@ -249,36 +301,42 @@ object UnicodeTextStyler {
             FancyFontStyle.ITALIC_SANS -> when (c) {
                 in 'A'..'Z' -> codePointToString(0x1D608 + (c - 'A'))
                 in 'a'..'z' -> codePointToString(0x1D622 + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7E2 + (c - '0'))
                 else -> c.toString()
             }
 
             FancyFontStyle.BOLD_ITALIC -> when (c) {
                 in 'A'..'Z' -> codePointToString(0x1D63C + (c - 'A'))
                 in 'a'..'z' -> codePointToString(0x1D656 + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7EC + (c - '0'))
                 else -> c.toString()
             }
 
             FancyFontStyle.SCRIPT_BOLD -> when (c) {
                 in 'A'..'Z' -> codePointToString(0x1D4D0 + (c - 'A'))
                 in 'a'..'z' -> codePointToString(0x1D4EA + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7CE + (c - '0'))
                 else -> c.toString()
             }
 
             FancyFontStyle.SCRIPT_REGULAR -> when (c) {
                 in 'A'..'Z' -> regularScriptExceptions[c] ?: codePointToString(0x1D49C + (c - 'A'))
                 in 'a'..'z' -> regularScriptExceptions[c] ?: codePointToString(0x1D4B6 + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7CE + (c - '0'))
                 else -> c.toString()
             }
 
             FancyFontStyle.FRAKTUR_BOLD -> when (c) {
                 in 'A'..'Z' -> codePointToString(0x1D56C + (c - 'A'))
                 in 'a'..'z' -> codePointToString(0x1D586 + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7CE + (c - '0'))
                 else -> c.toString()
             }
 
             FancyFontStyle.FRAKTUR_REGULAR -> when (c) {
                 in 'A'..'Z' -> regularFrakturExceptions[c] ?: codePointToString(0x1D504 + (c - 'A'))
                 in 'a'..'z' -> codePointToString(0x1D51E + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7CE + (c - '0'))
                 else -> c.toString()
             }
 
@@ -293,6 +351,7 @@ object UnicodeTextStyler {
                 in 'A'..'Z' -> codePointToString(0x1D434 + (c - 'A'))
                 'h' -> "\u210E"
                 in 'a'..'z' -> codePointToString(0x1D44E + (c - 'a'))
+                in '0'..'9' -> codePointToString(0x1D7CE + (c - '0'))
                 else -> c.toString()
             }
 

@@ -8,12 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.BengaliCalendarUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -64,7 +63,7 @@ fun QuickToolsNotepadPanel(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var activeTab by remember { mutableIntStateOf(0) } // 0 = Date/Time & Templates, 1 = Scratchpad + TTS
+    var activeTab by remember { mutableIntStateOf(0) } // 0 = তারিখ ও টেমপ্লেট, 1 = নোটপ্যাড ও কণ্ঠপাঠ
     var draftText by remember(notepadDraft) { mutableStateOf(notepadDraft) }
     var ttsReady by remember { mutableStateOf(false) }
 
@@ -114,32 +113,33 @@ fun QuickToolsNotepadPanel(
     }
 
     val now = remember { Date() }
-    val enDate = remember(now) { SimpleDateFormat("dd MMM yyyy", Locale.US).format(now) }
-    val enTime = remember(now) { SimpleDateFormat("hh:mm a", Locale.US).format(now) }
-    val enDay = remember(now) { SimpleDateFormat("EEEE", Locale.US).format(now) }
-    val bnDate = remember(now) {
+    val banglaCal = remember(now) { BengaliCalendarUtils.toBanglaDate(now) }
+    val banglaTimeNow = remember(now) { BengaliCalendarUtils.formatBanglaTime(now) }
+    val enDate = remember(now) { BengaliCalendarUtils.formatEnglishDate(now) }
+    val isoDate = remember(now) { BengaliCalendarUtils.formatIsoDate(now) }
+    val enTime = remember(now) { BengaliCalendarUtils.formatEnglishTime(now) }
+    val enDay = remember(now) { BengaliCalendarUtils.formatEnglishWeekday(now) }
+    val bnGregDate = remember(now) {
         val raw = SimpleDateFormat("dd MMMM yyyy", Locale("bn", "BD")).format(now)
-        toBengaliDigits(raw)
+        BengaliCalendarUtils.toBengaliDigits(raw)
     }
-    val bnTime = remember(now) {
-        val raw = SimpleDateFormat("hh:mm a", Locale("bn", "BD")).format(now)
-        toBengaliDigits(raw)
-    }
-    val bnDay = remember(now) { SimpleDateFormat("EEEE", Locale("bn", "BD")).format(now) }
 
     val dateTimeChips = listOf(
+        "🇧🇩 ${banglaCal.formattedFull}" to banglaCal.formattedFull,
+        "📅 ${banglaCal.formattedWithWeekday}" to banglaCal.formattedWithWeekday,
+        "🗓️ ${banglaCal.formattedShort}" to banglaCal.formattedShort,
+        "🕒 $banglaTimeNow" to banglaTimeNow,
+        "🗓️ $bnGregDate" to bnGregDate,
         "📅 $enDate" to enDate,
-        "🇧🇩 $bnDate" to bnDate,
         "🕒 $enTime" to enTime,
-        "🕒 $bnTime" to bnTime,
-        "📆 $enDay" to enDay,
-        "📆 $bnDay" to bnDay
+        "📆 $isoDate" to isoDate,
+        "📆 $enDay" to enDay
     )
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(262.dp)
+            .height(266.dp)
             .background(colors.background)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -151,7 +151,7 @@ fun QuickToolsNotepadPanel(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("Date & Templates" to 0, "Scratchpad & TTS" to 1).forEach { (title, idx) ->
+                listOf("তারিখ ও টেমপ্লেট" to 0, "নোটপ্যাড ও পড়ুন" to 1).forEach { (title, idx) ->
                     val selected = activeTab == idx
                     Box(
                         modifier = Modifier
@@ -192,13 +192,13 @@ fun QuickToolsNotepadPanel(
                         .testTag("util_tts_speak_button")
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Read Aloud", tint = colors.accent, modifier = Modifier.size(15.dp))
-                        Text("Speak", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "শুনুন", tint = colors.accent, modifier = Modifier.size(15.dp))
+                        Text("শুনুন", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 IconButton(onClick = { onHaptic(); onClose() }, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Close Utilities", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -212,7 +212,7 @@ fun QuickToolsNotepadPanel(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Icon(Icons.Default.Schedule, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp))
-                    Text("Live Date & Time Stamps", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("১-ট্যাপ সময়, ইংরেজি ও বাংলা তারিখ (বঙ্গাব্দ)", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Row(
@@ -221,19 +221,24 @@ fun QuickToolsNotepadPanel(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    dateTimeChips.forEach { (label, value) ->
+                    dateTimeChips.forEachIndexed { idx, (label, value) ->
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(colors.keyBackground)
+                                .background(if (idx == 0) colors.accent.copy(alpha = 0.16f) else colors.keyBackground)
                                 .clickable {
                                     onHaptic()
                                     onInsertSnippet(value)
                                 }
                                 .padding(horizontal = 10.dp, vertical = 7.dp)
-                                .testTag("datetime_chip_$value")
+                                .testTag("datetime_chip_$idx")
                         ) {
-                            Text(label, color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                label,
+                                color = if (idx == 0) colors.accent else colors.textPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = if (idx == 0) FontWeight.Bold else FontWeight.Medium
+                            )
                         }
                     }
                 }
@@ -243,7 +248,12 @@ fun QuickToolsNotepadPanel(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Quick Saved Templates (${userTemplates.size})", color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "সংরক্ষিত কুইক টেমপ্লেট (${BengaliCalendarUtils.toBengaliDigits(userTemplates.size.toString())})",
+                        color = colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     if (draftText.isNotBlank()) {
                         Box(
                             modifier = Modifier
@@ -257,7 +267,7 @@ fun QuickToolsNotepadPanel(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Icon(Icons.Default.Add, contentDescription = null, tint = colors.accent, modifier = Modifier.size(12.dp))
-                                Text("Save Note as Template", color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("নোট টেমপ্লেটে সেভ", color = colors.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -292,7 +302,7 @@ fun QuickToolsNotepadPanel(
                             },
                             modifier = Modifier.size(28.dp)
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Template", tint = colors.textSecondary, modifier = Modifier.size(15.dp))
+                            Icon(Icons.Default.Delete, contentDescription = "টেমপ্লেট মুছুন", tint = colors.textSecondary, modifier = Modifier.size(15.dp))
                         }
                     }
                 }
@@ -341,7 +351,7 @@ fun QuickToolsNotepadPanel(
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Clear", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("মুছুন", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Box(
@@ -356,7 +366,7 @@ fun QuickToolsNotepadPanel(
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("+ Template", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("+ টেমপ্লেট", color = colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Box(
@@ -373,7 +383,7 @@ fun QuickToolsNotepadPanel(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Insert Draft",
+                            text = "লেখায় বসিয়ে দিন",
                             color = if (draftText.isNotBlank()) Color.White else colors.textSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -381,15 +391,6 @@ fun QuickToolsNotepadPanel(
                     }
                 }
             }
-        }
-    }
-}
-
-private fun toBengaliDigits(input: String): String {
-    val bnDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
-    return buildString(input.length) {
-        for (c in input) {
-            if (c in '0'..'9') append(bnDigits[c - '0']) else append(c)
         }
     }
 }

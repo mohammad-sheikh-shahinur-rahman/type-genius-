@@ -193,4 +193,160 @@ class ExampleRobolectricTest {
         assertFalse(voiceController.isSessionActive)
         voiceController.destroy()
     }
+
+    @Test
+    fun `offline json backup export and import restores words, shortcuts, templates, notepad and prefs`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dict = DictionaryManager(context)
+        val shortcuts = TextShortcutRepository(context)
+        val settings = SettingsManager.getInstance(context)
+
+        dict.addCustomWord("বাংলাবিদ", "bn_probhat")
+        shortcuts.addOrUpdateShortcut("bk", "ব্যাকআপ পরীক্ষা")
+        settings.setNotepadDraft("অফলাইন নোট খসড়া")
+        settings.addUserTemplate("শুভ জন্মদিন ভাই!")
+        settings.addCustomAiPrompt("Bangla Clean", "শুদ্ধ বাংলায় লেখো")
+        settings.setSoundVolume(0.55f)
+        settings.setOtpAutoExpireMinutes(5)
+
+        val json = com.example.data.BackupRestoreManager.exportAllToJson(context)
+        assertTrue(json.contains("বাংলাবিদ"))
+        assertTrue(json.contains("ব্যাকআপ পরীক্ষা"))
+        assertTrue(json.contains("অফলাইন নোট খসড়া"))
+
+        // Clear/change values before restore
+        dict.clearAllLearnedWords()
+        settings.setNotepadDraft("")
+        settings.setSoundVolume(0.9f)
+        settings.setOtpAutoExpireMinutes(3)
+
+        val summary = com.example.data.BackupRestoreManager.importAllFromJson(context, json)
+        assertTrue(summary.importedWords >= 1)
+        assertTrue(summary.restoredNotepad)
+        assertTrue(summary.restoredSettingsCount >= 5)
+
+        assertTrue(dict.learnedWordsFlow.first().any { it.word == "বাংলাবিদ" })
+        assertEquals("অফলাইন নোট খসড়া", settings.notepadDraft.first())
+        assertEquals(5, settings.otpAutoExpireMinutes.first())
+        assertEquals(0.55f, settings.soundVolume.first(), 0.02f)
+    }
+
+    @Test
+    fun `real animated GIF89a encoder and custom bangla PNG sticker generator produce valid files`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val preset = com.example.ui.keyboard.AnimatedGifBuilder.presets.first()
+        val gifFile = com.example.ui.keyboard.AnimatedGifBuilder.getOrCreatePresetGif(context, preset)
+        assertTrue("Preset GIF should exist", gifFile.exists() && gifFile.length() > 500)
+        val gifBytes = gifFile.readBytes()
+        assertEquals("GIF89a", String(gifBytes.copyOfRange(0, 6)))
+        assertEquals(0x3B.toByte(), gifBytes.last())
+
+        val customGif = com.example.ui.keyboard.AnimatedGifBuilder.createCustomTextGif(context, "অস্থির!")
+        assertTrue("Custom GIF should exist", customGif.exists() && customGif.length() > 500)
+
+        val stickerFile = com.example.ui.keyboard.StickerImageGenerator.generateStickerPngFile(
+            context = context,
+            text = "অস্থির হইছে বস!",
+            emoji = "🔥",
+            gradient = com.example.ui.keyboard.StickerImageGenerator.gradientPresets.first(),
+            fontStyle = com.example.ui.keyboard.StickerFontStyle.BOLD
+        )
+        assertTrue("Sticker PNG should exist", stickerFile.exists() && stickerFile.length() > 500)
+        val pngHeader = stickerFile.readBytes().copyOfRange(0, 4)
+        assertEquals(0x89.toByte(), pngHeader[0])
+        assertEquals('P'.code.toByte(), pngHeader[1])
+        assertEquals('N'.code.toByte(), pngHeader[2])
+        assertEquals('G'.code.toByte(), pngHeader[3])
+    }
+
+    @Test
+    fun `otp auto expire deletes expired unpinned items and per-app smart language resolves properly`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = TypeGeniusDatabase.getDatabase(context)
+        val settings = SettingsManager.getInstance(context)
+        val now = System.currentTimeMillis()
+
+        db.clipboardDao().insert(
+            com.example.data.local.ClipboardItem(
+                content = "OTP 998877",
+                timestamp = now - 200_000L,
+                isSensitive = true,
+                expiresAt = now - 10_000L,
+                isPinned = false
+            )
+        )
+        db.clipboardDao().insert(
+            com.example.data.local.ClipboardItem(
+                content = "Pinned OTP 112233",
+                timestamp = now - 200_000L,
+                isSensitive = true,
+                expiresAt = now - 10_000L,
+                isPinned = true
+            )
+        )
+        db.clipboardDao().deleteExpired(now)
+        val remaining = db.clipboardDao().getAllItems().first()
+        assertFalse(remaining.any { it.content == "OTP 998877" })
+        assertTrue(remaining.any { it.content == "Pinned OTP 112233" })
+
+        val enabled = LanguageId.entries
+        assertEquals(
+            LanguageId.BANGLA_PHONETIC,
+            settings.resolveSmartLanguageForPackage("com.whatsapp", emptyMap(), enabled, LanguageId.ENGLISH)
+        )
+        assertEquals(
+            LanguageId.ENGLISH,
+            settings.resolveSmartLanguageForPackage("com.android.chrome", emptyMap(), enabled, LanguageId.BANGLA_PROBHAT)
+        )
+
+        settings.saveLanguageForPackage("com.whatsapp", LanguageId.BANGLA_UNIBIJOY.code)
+        val savedMap = settings.perAppLanguageMap.first()
+        assertEquals(
+            LanguageId.BANGLA_UNIBIJOY,
+            settings.resolveSmartLanguageForPackage("com.whatsapp", savedMap, enabled, LanguageId.ENGLISH)
+        )
+    }
+
+    @Test
+    fun `handwriting output generator creates valid PNGs and clipboard dao deduplicates and clears cleanly`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val hwFile = com.example.ui.keyboard.HandwritingOutputGenerator.generateHandwritingPngFile(
+            context = context,
+            rawText = "আমার সোনার বাংলা • Hello TypeGenius",
+            style = com.example.data.dictionary.FancyFontStyle.HANDWRITING_ATMA,
+            customFontPath = "",
+            paperTheme = com.example.ui.keyboard.HandwritingPaperTheme.NOTEBOOK
+        )
+        assertTrue("Handwriting PNG should exist", hwFile.exists() && hwFile.length() > 500)
+        val header = hwFile.readBytes().copyOfRange(0, 4)
+        assertEquals(0x89.toByte(), header[0])
+        assertEquals('P'.code.toByte(), header[1])
+        assertEquals('N'.code.toByte(), header[2])
+        assertEquals('G'.code.toByte(), header[3])
+
+        val db = TypeGeniusDatabase.getDatabase(context)
+        val dao = db.clipboardDao()
+        dao.clearAll()
+
+        val t1 = System.currentTimeMillis()
+        dao.insert(
+            com.example.data.local.ClipboardItem(
+                content = "https://typegenius.dev",
+                timestamp = t1,
+                isPinned = false
+            )
+        )
+        val found = dao.findByContent("https://typegenius.dev")
+        assertTrue(found != null)
+        dao.update(found!!.copy(isPinned = true, expiresAt = null))
+
+        val pinnedFound = dao.findByContent("https://typegenius.dev")
+        assertEquals(true, pinnedFound?.isPinned)
+
+        dao.clearUnpinned()
+        assertTrue(dao.getAllItems().first().any { it.content == "https://typegenius.dev" })
+
+        dao.clearAll()
+        assertTrue(dao.getAllItems().first().isEmpty())
+    }
 }

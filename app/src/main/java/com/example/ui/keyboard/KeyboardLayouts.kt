@@ -488,4 +488,50 @@ object KeyboardLayouts {
             add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.3f))
         }
     )
+
+    val devMathQuickSnippets: List<String> = listOf(
+        "=>", "!=", "===", "&&", "||", "->", "</>", "/**/", "≈", "∑", "√", "π", "∞"
+    )
+
+    val devMathSymbols: List<List<KeyAction>> = listOf(
+        listOf(
+            KeyAction("{", "/*", KeyType.CHARACTER),
+            KeyAction("}", "*/", KeyType.CHARACTER),
+            KeyAction("[", "[[", KeyType.CHARACTER),
+            KeyAction("]", "]]", KeyType.CHARACTER),
+            KeyAction("<", "≤", KeyType.CHARACTER),
+            KeyAction(">", "≥", KeyType.CHARACTER),
+            KeyAction("=>", "->", KeyType.CHARACTER),
+            KeyAction("!=", "≠", KeyType.CHARACTER),
+            KeyAction("==", "===", KeyType.CHARACTER),
+            KeyAction("≈", "~", KeyType.CHARACTER)
+        ),
+        listOf(
+            KeyAction("∑", "∏", KeyType.CHARACTER),
+            KeyAction("√", "∛", KeyType.CHARACTER),
+            KeyAction("π", "θ", KeyType.CHARACTER),
+            KeyAction("∞", "∅", KeyType.CHARACTER),
+            KeyAction("∫", "∂", KeyType.CHARACTER),
+            KeyAction("±", "∓", KeyType.CHARACTER),
+            KeyAction("≤", "≪", KeyType.CHARACTER),
+            KeyAction("≥", "≫", KeyType.CHARACTER),
+            KeyAction("÷", "/", KeyType.CHARACTER),
+            KeyAction("×", "*", KeyType.CHARACTER)
+        ),
+        buildList {
+            add(KeyAction("ABC", null, KeyType.MODE_SWITCH, weight = 1.25f))
+            addAll(
+                listOf(
+                    KeyAction("&&", "&", KeyType.CHARACTER),
+                    KeyAction("||", "|", KeyType.CHARACTER),
+                    KeyAction("^", "**", KeyType.CHARACTER),
+                    KeyAction("`", "~", KeyType.CHARACTER),
+                    KeyAction("\\", "/", KeyType.CHARACTER),
+                    KeyAction(";", ":", KeyType.CHARACTER),
+                    KeyAction("_", "-", KeyType.CHARACTER)
+                )
+            )
+            add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.25f))
+        }
+    )
 }

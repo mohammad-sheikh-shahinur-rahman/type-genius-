@@ -82,16 +82,68 @@ object CustomFontManager {
         return resolved
     }
 
-    private fun loadCustomFileFontFamily(path: String): FontFamily? {
+    fun hasCustomFont(customFontPath: String): Boolean {
+        if (customFontPath.isBlank()) return false
+        return runCatching {
+            val f = File(customFontPath)
+            f.exists() && f.length() >= 128L
+        }.getOrDefault(false)
+    }
+
+    fun getTypeface(context: Context, fontId: String, customFontPath: String): Typeface {
+        return when (KeyboardFontPreset.fromId(fontId)) {
+            KeyboardFontPreset.SYSTEM -> Typeface.DEFAULT
+            KeyboardFontPreset.GALADA_CALLIGRAPHY -> {
+                runCatching { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.galada) }.getOrNull()
+                    ?: Typeface.DEFAULT
+            }
+            KeyboardFontPreset.ATMA_HANDWRITING -> {
+                runCatching { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.atma) }.getOrNull()
+                    ?: Typeface.DEFAULT
+            }
+            KeyboardFontPreset.CUSTOM_IMPORTED -> {
+                loadCustomTypeface(customFontPath)
+                    ?: runCatching { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.atma) }.getOrNull()
+                    ?: Typeface.DEFAULT
+            }
+        }
+    }
+
+    fun getTypefaceForFancyStyle(
+        context: Context,
+        style: com.example.data.dictionary.FancyFontStyle,
+        customFontPath: String
+    ): Typeface {
+        val presetId = style.handwritingPresetId()
+        if (presetId != null) {
+            return getTypeface(context, presetId, customFontPath)
+        }
+        return when (style) {
+            com.example.data.dictionary.FancyFontStyle.BOLD_SANS,
+            com.example.data.dictionary.FancyFontStyle.SERIF_BOLD -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            com.example.data.dictionary.FancyFontStyle.ITALIC_SANS,
+            com.example.data.dictionary.FancyFontStyle.SERIF_ITALIC -> Typeface.create(Typeface.SERIF, Typeface.ITALIC)
+            com.example.data.dictionary.FancyFontStyle.BOLD_ITALIC -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
+            com.example.data.dictionary.FancyFontStyle.MONOSPACE -> Typeface.MONOSPACE
+            else -> runCatching { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.atma) }.getOrNull()
+                ?: Typeface.DEFAULT
+        }
+    }
+
+    private fun loadCustomTypeface(path: String): Typeface? {
         if (path.isBlank()) return null
         return try {
             val file = File(path)
             if (!file.exists() || file.length() < 128L) return null
-            val typeface = Typeface.createFromFile(file) ?: return null
-            FontFamily(typeface)
+            Typeface.createFromFile(file)
         } catch (_: Throwable) {
             null
         }
+    }
+
+    private fun loadCustomFileFontFamily(path: String): FontFamily? {
+        val typeface = loadCustomTypeface(path) ?: return null
+        return FontFamily(typeface)
     }
 
     suspend fun importFontFromUri(context: Context, uri: Uri): Result<Pair<String, String>> =

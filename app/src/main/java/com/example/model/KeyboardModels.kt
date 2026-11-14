@@ -144,10 +144,12 @@ enum class KeyboardViewMode {
     LETTERS,
     SYMBOLS_1,
     SYMBOLS_2,
+    DEV_MATH_SYMBOLS,
     NUMPAD,
     CALCULATOR,
     UTILITIES,
     EMOJI,
+    GIF,
     STICKERS_KAOMOJI,
     CLIPBOARD,
     TEXT_EDITOR,
@@ -155,6 +157,7 @@ enum class KeyboardViewMode {
     GEMINI_AI,
     THEME_PICKER,
     FANCY_FONTS,
+    QUICK_SETTINGS,
     MORE_TOOLS
 }
 
@@ -163,37 +166,42 @@ enum class KeyboardToolId(
     val label: String,
     val testTag: String
 ) {
-    TEXT_EDITING("text_editing", "Text edit", "toolbox_text_editing"),
-    GEMINI_AI("gemini_ai", "TypeGenius AI", "toolbox_gemini"),
-    EMOJI("emoji", "Emoji", "toolbox_emoji"),
-    STICKERS("stickers", "Stickers", "toolbox_stickers"),
-    CLIPBOARD("clipboard", "Clipboard", "toolbox_clipboard"),
-    TRANSLATOR("translator", "Translate", "toolbox_translator"),
-    CALCULATOR("calculator", "Calculator", "toolbox_calculator"),
-    UTILITIES("utilities", "Notes & Date", "toolbox_utilities"),
-    FANCY_FONTS("fancy_fonts", "Fonts", "toolbox_fonts"),
-    THEMES("themes", "Themes", "toolbox_themes"),
-    INCOGNITO("incognito", "Incognito", "toolbox_incognito"),
-    SETTINGS("settings", "Settings", "toolbox_settings"),
+    TEXT_EDITING("text_editing", "টেক্সট এডিট", "toolbox_text_editing"),
+    GEMINI_AI("gemini_ai", "বাংলাবিদ AI", "toolbox_gemini"),
+    EMOJI("emoji", "ইমোজি", "toolbox_emoji"),
+    STICKERS("stickers", "স্টিকার", "toolbox_stickers"),
+    CLIPBOARD("clipboard", "ক্লিপবোর্ড", "toolbox_clipboard"),
+    TRANSLATOR("translator", "অনুবাদ", "toolbox_translator"),
+    CALCULATOR("calculator", "ক্যালকুলেটর", "toolbox_calculator"),
+    UTILITIES("utilities", "তারিখ ও নোট", "toolbox_utilities"),
+    FANCY_FONTS("fancy_fonts", "ফন্ট স্টুডিও", "toolbox_fonts"),
+    THEMES("themes", "থিম", "toolbox_themes"),
+    INCOGNITO("incognito", "গোপন মোড", "toolbox_incognito"),
+    SETTINGS("settings", "সেটিংস", "toolbox_settings"),
     GIF("gif", "GIF", "toolbox_gif"),
-    ONE_HANDED("one_handed", "One-hand", "toolbox_one_handed"),
-    FLOATING("floating", "Floating", "toolbox_floating"),
-    RESIZE("resize", "Resize", "toolbox_resize"),
-    NUMPAD("numpad", "Numpad", "toolbox_numpad"),
-    SHARE("share", "Share", "toolbox_share");
+    DEV_MATH("dev_math", "কোড ও গণিত", "toolbox_dev_math"),
+    QUICK_SETTINGS("quick_settings", "উচ্চতা ও সাউন্ড", "toolbox_quick_settings"),
+    ONE_HANDED("one_handed", "এক হাতে", "toolbox_one_handed"),
+    FLOATING("floating", "ফ্লোটিং", "toolbox_floating"),
+    RESIZE("resize", "আকার ও সাউন্ড", "toolbox_resize"),
+    NUMPAD("numpad", "নাম্বার প্যাড", "toolbox_numpad"),
+    SHARE("share", "শেয়ার", "toolbox_share");
 
     companion object {
         val DEFAULT_TOOLBAR: List<KeyboardToolId> = listOf(
             TEXT_EDITING,
             GEMINI_AI,
             EMOJI,
+            GIF,
             STICKERS,
             CLIPBOARD,
             TRANSLATOR,
+            DEV_MATH,
             CALCULATOR,
             UTILITIES,
             FANCY_FONTS,
             THEMES,
+            QUICK_SETTINGS,
             SETTINGS
         )
 
@@ -222,4 +230,11 @@ enum class KeyType {
     AI_TOOLS,
     VOICE,
     SETTINGS
+}
+
+enum class PanelTextInputTarget {
+    NONE,
+    CLIPBOARD_SEARCH,
+    GIF_SEARCH,
+    STICKER_CUSTOM_TEXT
 }

@@ -1,9 +1,12 @@
 package com.example.ui.app
 
+import android.content.ClipData
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +32,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
@@ -36,6 +40,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -62,7 +67,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.CustomFontManager
 import com.example.data.KeyboardFontPreset
 import com.example.data.SettingsManager
+import com.example.data.dictionary.FancyFontStyle
 import com.example.model.KeyboardTheme
+import com.example.ui.keyboard.HandwritingOutputGenerator
+import com.example.ui.keyboard.HandwritingPaperTheme
 import com.example.ui.keyboard.KeyboardThemeData
 import com.example.ui.theme.TGMagenta
 import com.example.ui.theme.TGViolet
@@ -80,6 +88,7 @@ fun HandwritingFontSettingsCard(
     val selectedFontId by settingsManager.keyboardFontId.collectAsState(initial = KeyboardFontPreset.ATMA_HANDWRITING.id)
     val customFontPath by settingsManager.customFontPath.collectAsState(initial = "")
     val customFontName by settingsManager.customFontName.collectAsState(initial = "")
+    val activeFancyStyle by settingsManager.activeFancyFontStyle.collectAsState(initial = FancyFontStyle.NORMAL)
     val currentTheme by settingsManager.keyboardTheme.collectAsState(initial = KeyboardTheme.MATERIAL_YOU)
     val isDark = isSystemInDarkTheme()
     val kbColors = remember(currentTheme, isDark) {
@@ -102,9 +111,10 @@ fun HandwritingFontSettingsCard(
                 val res = CustomFontManager.importFontFromUri(context, uri)
                 res.onSuccess { (path, displayName) ->
                     settingsManager.setCustomFont(path, displayName)
+                    settingsManager.setActiveFancyFontStyle(FancyFontStyle.HANDWRITING_CUSTOM)
                     Toast.makeText(
                         context,
-                        "হাতের লেখা ফন্ট যুক্ত হয়েছে: $displayName",
+                        "হাতের লেখা ফন্ট যুক্ত ও ফ্যান্সি ফন্টে অ্যাক্টিভ হয়েছে: $displayName",
                         Toast.LENGTH_LONG
                     ).show()
                 }.onFailure { err ->
@@ -294,7 +304,15 @@ fun HandwritingFontSettingsCard(
                                                     )
                                                 )
                                             } else {
-                                                scope.launch { settingsManager.setKeyboardFontId(preset.id) }
+                                                scope.launch {
+                                                    settingsManager.setKeyboardFontId(preset.id)
+                                                    val mapped = FancyFontStyle.fromHandwritingPresetId(preset.id)
+                                                    if (mapped != null) {
+                                                        settingsManager.setActiveFancyFontStyle(mapped)
+                                                    } else if (activeFancyStyle.isHandwritingFont) {
+                                                        settingsManager.setActiveFancyFontStyle(FancyFontStyle.NORMAL)
+                                                    }
+                                                }
                                             }
                                         }
                                         .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -356,6 +374,9 @@ fun HandwritingFontSettingsCard(
                                                         CustomFontManager.clearCustomFont(context)
                                                         settingsManager.setCustomFont("", "")
                                                         settingsManager.setKeyboardFontId(KeyboardFontPreset.ATMA_HANDWRITING.id)
+                                                        if (activeFancyStyle == FancyFontStyle.HANDWRITING_CUSTOM) {
+                                                            settingsManager.setActiveFancyFontStyle(FancyFontStyle.HANDWRITING_ATMA)
+                                                        }
                                                         Toast.makeText(context, "ইমপোর্ট করা ফন্ট রিসেট হয়েছে", Toast.LENGTH_SHORT).show()
                                                     }
                                                 },
@@ -424,6 +445,54 @@ fun HandwritingFontSettingsCard(
                         text = "হাতের লেখা .zip / .ttf ফন্ট ফাইল ইমপোর্ট করুন",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            val shareStyle = FancyFontStyle.fromHandwritingPresetId(selectedFontId)
+                                ?: FancyFontStyle.HANDWRITING_ATMA
+                            val file = HandwritingOutputGenerator.generateHandwritingPngFile(
+                                context = context,
+                                rawText = samplePreviewText.ifBlank { "আমার হাতের লেখা বাংলা" },
+                                style = shareStyle,
+                                customFontPath = customFontPath,
+                                customFontName = customFontName,
+                                paperTheme = HandwritingPaperTheme.NOTEBOOK
+                            )
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "image/png"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                clipData = ClipData.newUri(context.contentResolver, "Handwriting Output", uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(Intent.createChooser(send, "হাতের লেখা শেয়ার করুন"))
+                        }.onFailure {
+                            Toast.makeText(context, "হাতের লেখা শেয়ার করা যায়নি", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp)
+                        .testTag("share_handwriting_card_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = TGMagenta,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "হাতের লেখা কার্ড হিসেবে শেয়ার করুন (WhatsApp/Messenger)",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TGMagenta,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

@@ -700,4 +700,80 @@ class ExampleUnitTest {
             assertEquals(44 + stdSamples.size * 2, wav.size)
         }
     }
+
+    @Test
+    fun testBengaliCalendarUtils_revisedBongabdoAndDigits() {
+        assertEquals("২০২৬", com.example.data.BengaliCalendarUtils.toBengaliDigits("2026"))
+
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2025, java.util.Calendar.APRIL, 14, 10, 30, 0)
+        val pohela = com.example.data.BengaliCalendarUtils.toBanglaDate(cal.time)
+        assertEquals(1, pohela.day)
+        assertEquals("বৈশাখ", pohela.monthName)
+        assertEquals(1432, pohela.year)
+        assertEquals("১ বৈশাখ ১৪৩২ বঙ্গাব্দ", pohela.formattedFull)
+
+        cal.set(2025, java.util.Calendar.APRIL, 13, 10, 30, 0)
+        val choitroEnd = com.example.data.BengaliCalendarUtils.toBanglaDate(cal.time)
+        assertEquals("চৈত্র", choitroEnd.monthName)
+        assertEquals(1431, choitroEnd.year)
+        assertEquals(30, choitroEnd.day)
+    }
+
+    @Test
+    fun testDevMathSymbolsLayout_andNewToolbarTools() {
+        val allLabels = KeyboardLayouts.devMathSymbols.flatten().map { it.label }.toSet()
+        listOf("{", "}", "[", "]", "<", ">", "=>", "!=", "≈", "∑", "√", "π", "∞").forEach { sym ->
+            assertTrue("Expected $sym in devMathSymbols", allLabels.contains(sym))
+        }
+        assertTrue(KeyboardLayouts.devMathQuickSnippets.contains("=>"))
+        assertTrue(KeyboardLayouts.devMathQuickSnippets.contains("∞"))
+
+        assertEquals(KeyboardToolId.DEV_MATH, KeyboardToolId.fromId("dev_math"))
+        assertEquals(KeyboardToolId.QUICK_SETTINGS, KeyboardToolId.fromId("quick_settings"))
+        assertTrue(KeyboardToolId.DEFAULT_TOOLBAR.contains(KeyboardToolId.GIF))
+    }
+
+    @Test
+    fun testSmartClipboardParser_sensitiveAutoExpireDetection() {
+        val otp = "Your bKash OTP is 592814"
+        assertTrue(SmartClipboardParser.isSensitiveForAutoExpire(otp, SmartClipboardParser.classify(otp)))
+
+        val pin = "My ATM pin: 4412"
+        assertTrue(SmartClipboardParser.isSensitiveForAutoExpire(pin, SmartClipboardParser.classify(pin)))
+
+        val normal = "চলো বিকেলে চা খাই"
+        assertFalse(SmartClipboardParser.isSensitiveForAutoExpire(normal, SmartClipboardParser.classify(normal)))
+    }
+
+    @Test
+    fun testFancyFonts_handwritingPresetsAndDigitStylingRoundtrip() {
+        assertTrue(FancyFontStyle.HANDWRITING_CUSTOM.isHandwritingFont)
+        assertTrue(FancyFontStyle.HANDWRITING_ATMA.isHandwritingFont)
+        assertTrue(FancyFontStyle.HANDWRITING_GALADA.isHandwritingFont)
+
+        assertEquals("custom", FancyFontStyle.HANDWRITING_CUSTOM.handwritingPresetId())
+        assertEquals("atma", FancyFontStyle.HANDWRITING_ATMA.handwritingPresetId())
+        assertEquals("galada", FancyFontStyle.HANDWRITING_GALADA.handwritingPresetId())
+        assertEquals(FancyFontStyle.HANDWRITING_CUSTOM, FancyFontStyle.fromHandwritingPresetId("custom"))
+        assertEquals(FancyFontStyle.HANDWRITING_ATMA, FancyFontStyle.fromHandwritingPresetId("atma"))
+        assertEquals(FancyFontStyle.HANDWRITING_GALADA, FancyFontStyle.fromHandwritingPresetId("galada"))
+
+        val hwText = "আমার হাতের লেখা 2026"
+        assertEquals(hwText, UnicodeTextStyler.styleText(hwText, FancyFontStyle.HANDWRITING_ATMA))
+        assertEquals(hwText, UnicodeTextStyler.styleSingleInput(hwText, FancyFontStyle.HANDWRITING_CUSTOM))
+
+        // Verify italic/script/fraktur styles transform digits too and unstyle back cleanly
+        val italicDigits = UnicodeTextStyler.styleText("Abc 123", FancyFontStyle.ITALIC_SANS)
+        assertEquals("𝘈𝘣𝘤 𝟣𝟤𝟥", italicDigits)
+        assertEquals("Abc 123", UnicodeTextStyler.unstyleToPlain(italicDigits))
+
+        val scriptDigits = UnicodeTextStyler.styleText("2026", FancyFontStyle.SCRIPT_BOLD)
+        assertEquals("𝟐𝟎𝟐𝟔", scriptDigits)
+        assertEquals("2026", UnicodeTextStyler.unstyleToPlain(scriptDigits))
+
+        val frakturDigits = UnicodeTextStyler.styleText("Type 789", FancyFontStyle.FRAKTUR_BOLD)
+        assertEquals("𝕿𝖞𝖕𝖊 𝟕𝟖𝟗", frakturDigits)
+        assertEquals("Type 789", UnicodeTextStyler.unstyleToPlain(frakturDigits))
+    }
 }

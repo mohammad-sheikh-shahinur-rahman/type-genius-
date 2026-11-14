@@ -1,11 +1,13 @@
 package com.example.service
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.media.AudioManager
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -17,6 +19,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.content.FileProvider
+import androidx.core.view.inputmethod.EditorInfoCompat
+import androidx.core.view.inputmethod.InputConnectionCompat
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -29,6 +35,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
+import com.example.data.CustomFontManager
 import com.example.data.SettingsManager
 import com.example.data.TypingStatsManager
 import com.example.data.ai.TypeGeniusAiEngine
@@ -51,12 +58,17 @@ import com.example.model.KeyAction
 import com.example.model.KeyType
 import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
+import com.example.model.PanelTextInputTarget
 import com.example.model.SoundProfile
+import com.example.ui.keyboard.HandwritingOutputGenerator
+import com.example.ui.keyboard.HandwritingPaperTheme
 import com.example.ui.keyboard.KeyboardView
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -110,6 +122,9 @@ class TypeGeniusIME : InputMethodService(),
     private var isTranslatorVoiceActive by mutableStateOf(false)
 
     private var activeFancyStyle by mutableStateOf(FancyFontStyle.NORMAL)
+    private var handwritingLiveText by mutableStateOf("")
+    private var customFontPathCache by mutableStateOf("")
+    private var customFontNameCache by mutableStateOf("")
     private var lastTypedWordPreview by mutableStateOf("")
     private var lastDeletedUndoText by mutableStateOf("")
     private var lastGlideCommittedWord by mutableStateOf("")
@@ -123,10 +138,21 @@ class TypeGeniusIME : InputMethodService(),
     private var aiCapturedAfter = ""
 
     private var soundEnabled = false
+    private var soundVolume = 0.75f
     private var soundProfile = SoundProfile.SYSTEM
     private var spellCheckEnabled = true
     private var autoCapitalizeEnabled = true
     private var isIncognitoEnabled = false
+    private var otpAutoExpireMinutes = 3
+    private var perAppSmartLanguageEnabled = true
+    private var perAppLanguageMap: Map<String, String> = emptyMap()
+    private var currentAppPackage: String? = null
+    private var isSensitiveLockedField = false
+
+    private var panelInputTarget by mutableStateOf(PanelTextInputTarget.NONE)
+    private var clipboardSearchQuery by mutableStateOf("")
+    private var gifSearchQuery by mutableStateOf("")
+    private var customStickerText by mutableStateOf("অস্থির হইছে বস!")
 
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
 
@@ -150,11 +176,25 @@ class TypeGeniusIME : InputMethodService(),
             launch { OfflineTranslator.initialize(this@TypeGeniusIME) }
             launch { shortcutRepository.ensureSeededDefaults() }
             launch { settingsManager.soundOnKeyPress.collect { soundEnabled = it } }
+            launch { settingsManager.soundVolume.collect { soundVolume = it } }
             launch { settingsManager.soundProfile.collect { soundProfile = it } }
             launch { settingsManager.spellCheckEnabled.collect { spellCheckEnabled = it } }
             launch { settingsManager.autoCapitalize.collect { autoCapitalizeEnabled = it } }
             launch { settingsManager.isIncognitoMode.collect { isIncognitoEnabled = it } }
             launch { settingsManager.activeFancyFontStyle.collect { activeFancyStyle = it } }
+            launch { settingsManager.customFontPath.collect { customFontPathCache = it } }
+            launch { settingsManager.customFontName.collect { customFontNameCache = it } }
+            launch { settingsManager.otpAutoExpireMinutes.collect { otpAutoExpireMinutes = it } }
+            launch { settingsManager.perAppSmartLanguageEnabled.collect { perAppSmartLanguageEnabled = it } }
+            launch { settingsManager.perAppLanguageMap.collect { perAppLanguageMap = it } }
+            launch(Dispatchers.IO) {
+                while (true) {
+                    runCatching {
+                        database.clipboardDao().deleteExpired(System.currentTimeMillis())
+                    }
+                    delay(10_000L)
+                }
+            }
             launch {
                 settingsManager.enabledLanguages.collect { enabledCodes ->
                     val list = enabledCodes.map { LanguageId.fromCode(it) }
@@ -167,11 +207,17 @@ class TypeGeniusIME : InputMethodService(),
                 }
             }
             soundEnabled = settingsManager.soundOnKeyPress.first()
+            soundVolume = settingsManager.soundVolume.first()
             soundProfile = settingsManager.soundProfile.first()
+            otpAutoExpireMinutes = settingsManager.otpAutoExpireMinutes.first()
+            perAppSmartLanguageEnabled = settingsManager.perAppSmartLanguageEnabled.first()
+            perAppLanguageMap = settingsManager.perAppLanguageMap.first()
             val savedLangCode = settingsManager.activeLanguageCode.first()
             activeLanguage = LanguageId.fromCode(savedLangCode)
             hasInitializedLanguage = true
             activeFancyStyle = settingsManager.activeFancyFontStyle.first()
+            customFontPathCache = settingsManager.customFontPath.first()
+            customFontNameCache = settingsManager.customFontName.first()
         }
 
         setupClipboardMonitoring()
@@ -188,10 +234,37 @@ class TypeGeniusIME : InputMethodService(),
                     if (!text.isNullOrBlank()) {
                         val parsed = SmartClipboardParser.classify(text)
                         smartClipSuggestion = if (SmartClipboardParser.isHighPrioritySmartClip(parsed)) parsed else null
+                        val isSensitive = SmartClipboardParser.isSensitiveForAutoExpire(text, parsed)
+                        val now = System.currentTimeMillis()
+                        val expiresAt = if (isSensitive && otpAutoExpireMinutes > 0) {
+                            now + otpAutoExpireMinutes * 60_000L
+                        } else null
                         serviceScope.launch(Dispatchers.IO) {
-                            database.clipboardDao().insert(
-                                ClipboardItem(content = text, timestamp = System.currentTimeMillis())
-                            )
+                            val dao = database.clipboardDao()
+                            val existing = dao.findByContent(text)
+                            if (existing != null) {
+                                val updatedExpiresAt = if (existing.isPinned) {
+                                    null
+                                } else {
+                                    expiresAt
+                                }
+                                dao.update(
+                                    existing.copy(
+                                        timestamp = now,
+                                        isSensitive = isSensitive,
+                                        expiresAt = updatedExpiresAt
+                                    )
+                                )
+                            } else {
+                                dao.insert(
+                                    ClipboardItem(
+                                        content = text,
+                                        timestamp = now,
+                                        isSensitive = isSensitive,
+                                        expiresAt = expiresAt
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -254,9 +327,11 @@ class TypeGeniusIME : InputMethodService(),
                     onKeyAction = { handleKeyAction(it) },
                     onSelectViewMode = { targetMode ->
                         if (targetMode == KeyboardViewMode.TRANSLATOR) {
+                            panelInputTarget = PanelTextInputTarget.NONE
                             openTranslator()
                         } else {
                             if (composingBuffer.isNotEmpty()) commitComposing()
+                            panelInputTarget = PanelTextInputTarget.NONE
                             if (targetMode == KeyboardViewMode.GEMINI_AI) {
                                 aiSourceSnapshot = readFieldTextForAi()
                             }
@@ -275,11 +350,28 @@ class TypeGeniusIME : InputMethodService(),
                         } else {
                             currentInputConnection?.commitText(text, 1)
                         }
+                        refreshHandwritingLiveText()
                         viewMode = KeyboardViewMode.LETTERS
+                    },
+                    onCopyClipboardItem = { item ->
+                        copyToSystemClipboard(item.content)
                     },
                     onTogglePinClipboardItem = { item ->
                         serviceScope.launch(Dispatchers.IO) {
-                            database.clipboardDao().update(item.copy(isPinned = !item.isPinned))
+                            val nowPinned = !item.isPinned
+                            val newExpiresAt = if (nowPinned) {
+                                null
+                            } else if (item.isSensitive && otpAutoExpireMinutes > 0) {
+                                System.currentTimeMillis() + otpAutoExpireMinutes * 60_000L
+                            } else {
+                                item.expiresAt
+                            }
+                            database.clipboardDao().update(
+                                item.copy(
+                                    isPinned = nowPinned,
+                                    expiresAt = newExpiresAt
+                                )
+                            )
                         }
                     },
                     onDeleteClipboardItem = { item ->
@@ -290,6 +382,11 @@ class TypeGeniusIME : InputMethodService(),
                     onClearClipboard = {
                         serviceScope.launch(Dispatchers.IO) {
                             database.clipboardDao().clearUnpinned()
+                        }
+                    },
+                    onClearEverythingClipboard = {
+                        serviceScope.launch(Dispatchers.IO) {
+                            database.clipboardDao().clearAll()
                         }
                     },
                     onMoveCursor = { dx, dy, select -> moveCursor(dx, dy, select) },
@@ -305,15 +402,34 @@ class TypeGeniusIME : InputMethodService(),
                     onUndoDelete = { undoLastDeletedWord() },
                     onGlideCommitted = { trail, keyCenters -> handleGlideSwipe(trail, keyCenters) },
                     onSelectFancyStyle = { style ->
+                        if (style == FancyFontStyle.HANDWRITING_CUSTOM && !CustomFontManager.hasCustomFont(customFontPathCache)) {
+                            Toast.makeText(
+                                this@TypeGeniusIME,
+                                "সেটিংস থেকে আপনার হাতের লেখা (.zip/.ttf) ফন্ট যুক্ত করুন",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            openCompanionSettings()
+                            return@KeyboardView
+                        }
                         activeFancyStyle = style
-                        serviceScope.launch { settingsManager.setActiveFancyFontStyle(style) }
+                        serviceScope.launch {
+                            settingsManager.setActiveFancyFontStyle(style)
+                            style.handwritingPresetId()?.let { presetId ->
+                                settingsManager.setKeyboardFontId(presetId)
+                            }
+                        }
+                        refreshHandwritingLiveText()
                         viewMode = KeyboardViewMode.LETTERS
                     },
                     onTransformLastWord = { style -> transformLastWordWithStyle(style) },
+                    onSendFancyStyleCard = { style, paperTheme -> sendFancyStyleCard(style, paperTheme) },
+                    onOpenHandwritingImport = { openCompanionSettings() },
                     onInsertTextSnippet = { snippet ->
                         if (isTranslatorOpen) translatorSourceText += snippet
                         else currentInputConnection?.commitText(snippet, 1)
+                        refreshHandwritingLiveText()
                     },
+                    handwritingLiveText = handwritingLiveText,
                     aiSourceText = aiSourceSnapshot,
                     canUndoAiEdit = lastAiOriginalText.isNotEmpty() && lastAiReplacedText.isNotEmpty(),
                     liveGrammarIssueCount = liveGrammarIssueCount,
@@ -325,12 +441,34 @@ class TypeGeniusIME : InputMethodService(),
                             currentInputConnection?.commitText(info.extractedValue, 1)
                         }
                         smartClipSuggestion = null
+                        refreshHandwritingLiveText()
                         updateSuggestions()
                     },
                     onDismissSmartClip = { smartClipSuggestion = null },
                     onRefreshAiSourceText = { readFieldTextForAi() },
                     onApplyAiText = { newText -> applyAiReplacement(newText) },
                     onUndoAiText = { undoAiReplacement() },
+                    panelInputTarget = panelInputTarget,
+                    clipboardSearchQuery = clipboardSearchQuery,
+                    gifSearchQuery = gifSearchQuery,
+                    customStickerText = customStickerText,
+                    onSetPanelInputTarget = { target ->
+                        if (composingBuffer.isNotEmpty()) commitComposing()
+                        panelInputTarget = target
+                    },
+                    onClearPanelSearchQuery = { target ->
+                        composingBuffer = ""
+                        when (target) {
+                            PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery = ""
+                            PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery = ""
+                            PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText = ""
+                            PanelTextInputTarget.NONE -> {}
+                        }
+                    },
+                    onCustomStickerTextChange = { customStickerText = it },
+                    onSendMediaFile = { file, mimeType, shareOnly, fallback ->
+                        sendMediaFile(file, mimeType, shareOnly, fallback)
+                    },
                     voiceController = voiceInputController
                 )
             }
@@ -344,6 +482,7 @@ class TypeGeniusIME : InputMethodService(),
 
         composingBuffer = ""
         translatorComposingPreview = ""
+        handwritingLiveText = ""
         isTypingActive = false
         isTranslatorVoiceActive = false
         lastDeletedUndoText = ""
@@ -352,18 +491,75 @@ class TypeGeniusIME : InputMethodService(),
         lastAiOriginalText = ""
         lastAiReplacedText = ""
         liveGrammarIssueCount = 0
+        panelInputTarget = PanelTextInputTarget.NONE
         viewMode = KeyboardViewMode.LETTERS
+        currentAppPackage = info?.packageName
+
+        val inputType = info?.inputType ?: 0
+        val cls = inputType and InputType.TYPE_MASK_CLASS
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        isSensitiveLockedField = cls == InputType.TYPE_CLASS_TEXT && (
+            variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_URI ||
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+            )
+
         updateAutoCapitalizeState()
 
         serviceScope.launch {
+            launch(Dispatchers.IO) {
+                runCatching { database.clipboardDao().deleteExpired(System.currentTimeMillis()) }
+            }
             if (!hasInitializedLanguage) {
                 val savedCode = settingsManager.activeLanguageCode.first()
                 activeLanguage = LanguageId.fromCode(savedCode)
                 hasInitializedLanguage = true
             }
             soundEnabled = settingsManager.soundOnKeyPress.first()
+            soundVolume = settingsManager.soundVolume.first()
             soundProfile = settingsManager.soundProfile.first()
+            activeFancyStyle = settingsManager.activeFancyFontStyle.first()
+            customFontPathCache = settingsManager.customFontPath.first()
+            customFontNameCache = settingsManager.customFontName.first()
+            otpAutoExpireMinutes = settingsManager.otpAutoExpireMinutes.first()
+            perAppSmartLanguageEnabled = settingsManager.perAppSmartLanguageEnabled.first()
+            perAppLanguageMap = settingsManager.perAppLanguageMap.first()
+
+            if (isSensitiveLockedField) {
+                activeLanguage = enabledLanguages.find {
+                    it == LanguageId.ENGLISH || it == LanguageId.ENGLISH_UK
+                } ?: LanguageId.ENGLISH
+            } else if (perAppSmartLanguageEnabled && !currentAppPackage.isNullOrBlank()) {
+                val smartLang = settingsManager.resolveSmartLanguageForPackage(
+                    packageName = currentAppPackage,
+                    savedPerAppMap = perAppLanguageMap,
+                    enabledLangs = enabledLanguages,
+                    currentLang = activeLanguage
+                )
+                if (smartLang != null && smartLang != activeLanguage) {
+                    activeLanguage = smartLang
+                }
+            }
+            updateAutoCapitalizeState()
+            refreshHandwritingLiveText()
             updateSuggestions()
+        }
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        if (activeFancyStyle.isHandwritingFont) {
+            refreshHandwritingLiveText()
         }
     }
 
@@ -373,6 +569,7 @@ class TypeGeniusIME : InputMethodService(),
         currentInputConnection?.finishComposingText()
         composingBuffer = ""
         translatorComposingPreview = ""
+        panelInputTarget = PanelTextInputTarget.NONE
         isTypingActive = false
         voiceInputController.stopListening()
         isTranslatorVoiceActive = false
@@ -395,7 +592,7 @@ class TypeGeniusIME : InputMethodService(),
 
     private fun playKeyClickSound(keyType: KeyType) {
         if (!soundEnabled) return
-        keySoundEngine.play(soundProfile, keyType)
+        keySoundEngine.play(soundProfile, keyType, soundVolume)
     }
 
     private fun recordCommittedWordMetrics(word: String, textBeforeWord: String = "") {
@@ -421,6 +618,11 @@ class TypeGeniusIME : InputMethodService(),
         if (action.type != KeyType.BACKSPACE) {
             lastDeletedUndoText = ""
             lastGlideCommittedWord = ""
+        }
+
+        if (panelInputTarget != PanelTextInputTarget.NONE) {
+            handlePanelInputKeyAction(action)
+            return
         }
 
         if (isTranslatorOpen) {
@@ -478,6 +680,7 @@ class TypeGeniusIME : InputMethodService(),
                     updateAutoCapitalizeState()
                     updateSuggestions()
                 }
+                refreshHandwritingLiveText()
             }
 
             KeyType.SPACEBAR -> {
@@ -534,6 +737,7 @@ class TypeGeniusIME : InputMethodService(),
                 isTypingActive = false
                 updateAutoCapitalizeState()
                 updateSuggestions()
+                refreshHandwritingLiveText()
             }
 
             KeyType.BACKSPACE -> {
@@ -562,6 +766,7 @@ class TypeGeniusIME : InputMethodService(),
                     updateAutoCapitalizeState()
                     updateSuggestions()
                 }
+                refreshHandwritingLiveText()
             }
 
             KeyType.ENTER -> {
@@ -579,6 +784,7 @@ class TypeGeniusIME : InputMethodService(),
                     sendKeyEvents(KeyEvent.KEYCODE_ENTER)
                 }
                 updateAutoCapitalizeState()
+                refreshHandwritingLiveText()
             }
 
             KeyType.SHIFT -> {
@@ -631,16 +837,30 @@ class TypeGeniusIME : InputMethodService(),
                 if (activeLanguage == LanguageId.BANGLA_PHONETIC && char.matches(Regex("[a-zA-Z]"))) {
                     composingBuffer += char
                     val candidates = BengaliPhoneticParser.parsePhonetic(composingBuffer)
-                    translatorComposingPreview = candidates.firstOrNull() ?: composingBuffer
+                    val top = candidates.firstOrNull { c -> c.any { it in '\u0980'..'\u09FF' } }
+                        ?: candidates.firstOrNull()
+                        ?: composingBuffer
+                    translatorComposingPreview = if (activeFancyStyle != FancyFontStyle.NORMAL && !activeFancyStyle.isDecoratorFrame) {
+                        UnicodeTextStyler.styleText(top, activeFancyStyle)
+                    } else top
                     suggestions = candidates
+                    if (isShifted && !isCapsLock) {
+                        isShifted = false
+                    }
                 } else {
                     if (composingBuffer.isNotEmpty()) {
-                        val committed = suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
-                        translatorSourceText += committed
+                        val committed = suggestions.firstOrNull() ?: composingBuffer
+                        val styledCommitted = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                            UnicodeTextStyler.styleText(committed, activeFancyStyle)
+                        } else committed
+                        translatorSourceText += styledCommitted
                         composingBuffer = ""
                         translatorComposingPreview = ""
                     }
-                    translatorSourceText += char
+                    val charToAdd = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                        UnicodeTextStyler.styleSingleInput(char, activeFancyStyle)
+                    } else char
+                    translatorSourceText += charToAdd
                     if (isShifted && !isCapsLock) {
                         isShifted = false
                     }
@@ -650,8 +870,11 @@ class TypeGeniusIME : InputMethodService(),
 
             KeyType.SPACEBAR -> {
                 if (composingBuffer.isNotEmpty()) {
-                    val committed = suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
-                    translatorSourceText += committed
+                    val committed = suggestions.firstOrNull() ?: composingBuffer
+                    val styledCommitted = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                        UnicodeTextStyler.styleText(committed, activeFancyStyle)
+                    } else committed
+                    translatorSourceText += styledCommitted
                     serviceScope.launch {
                         dictionaryManager.recordWordUsed(committed, activeLanguage)
                     }
@@ -672,7 +895,10 @@ class TypeGeniusIME : InputMethodService(),
                         updateTranslatorSuggestions()
                     } else {
                         val candidates = BengaliPhoneticParser.parsePhonetic(composingBuffer)
-                        translatorComposingPreview = candidates.firstOrNull() ?: composingBuffer
+                        val top = candidates.firstOrNull() ?: composingBuffer
+                        translatorComposingPreview = if (activeFancyStyle != FancyFontStyle.NORMAL && !activeFancyStyle.isDecoratorFrame) {
+                            UnicodeTextStyler.styleText(top, activeFancyStyle)
+                        } else top
                         suggestions = candidates
                     }
                 } else if (translatorSourceText.isNotEmpty()) {
@@ -683,8 +909,11 @@ class TypeGeniusIME : InputMethodService(),
 
             KeyType.ENTER -> {
                 if (composingBuffer.isNotEmpty()) {
-                    val committed = suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
-                    translatorSourceText += committed
+                    val committed = suggestions.firstOrNull() ?: composingBuffer
+                    val styledCommitted = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                        UnicodeTextStyler.styleText(committed, activeFancyStyle)
+                    } else committed
+                    translatorSourceText += styledCommitted
                     composingBuffer = ""
                     translatorComposingPreview = ""
                 }
@@ -708,7 +937,10 @@ class TypeGeniusIME : InputMethodService(),
 
             KeyType.MODE_SWITCH -> {
                 if (composingBuffer.isNotEmpty()) {
-                    translatorSourceText += suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
+                    val committed = suggestions.firstOrNull() ?: composingBuffer
+                    translatorSourceText += if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                        UnicodeTextStyler.styleText(committed, activeFancyStyle)
+                    } else committed
                     composingBuffer = ""
                     translatorComposingPreview = ""
                 }
@@ -990,8 +1222,11 @@ class TypeGeniusIME : InputMethodService(),
     private fun commitComposing() {
         if (isTranslatorOpen) {
             if (composingBuffer.isNotEmpty()) {
-                val top = suggestions.firstOrNull() ?: translatorComposingPreview.ifEmpty { composingBuffer }
-                translatorSourceText += top
+                val top = suggestions.firstOrNull() ?: composingBuffer
+                val styledTop = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                    UnicodeTextStyler.styleText(top, activeFancyStyle)
+                } else top
+                translatorSourceText += styledTop
                 if (!isIncognitoEnabled) {
                     serviceScope.launch {
                         dictionaryManager.recordWordUsed(top, activeLanguage)
@@ -1001,6 +1236,7 @@ class TypeGeniusIME : InputMethodService(),
                 translatorComposingPreview = ""
                 isTypingActive = false
             }
+            refreshHandwritingLiveText()
             return
         }
         val ic = currentInputConnection ?: return
@@ -1021,6 +1257,7 @@ class TypeGeniusIME : InputMethodService(),
             composingBuffer = ""
             isTypingActive = false
             suggestions = dictionaryManager.getDefaultSuggestions(activeLanguage)
+            refreshHandwritingLiveText()
         }
     }
 
@@ -1029,16 +1266,37 @@ class TypeGeniusIME : InputMethodService(),
         val grammarFix = activeGrammarSuggestions[candidate]
         val commitValue = grammarFix?.correctedPhrase ?: candidate
 
+        if (panelInputTarget != PanelTextInputTarget.NONE) {
+            val current = getPanelTargetText()
+            val updated = if (composingBuffer.isNotEmpty()) {
+                val parsed = BengaliPhoneticParser.parsePhonetic(composingBuffer).firstOrNull() ?: composingBuffer
+                val trimmedBase = if (current.endsWith(parsed)) current.dropLast(parsed.length) else current
+                composingBuffer = ""
+                "$trimmedBase$commitValue "
+            } else {
+                val token = current.takeLastWhile { !it.isWhitespace() }
+                val base = if (token.isNotEmpty()) current.dropLast(token.length) else current
+                "$base$commitValue "
+            }
+            setPanelTargetText(updated)
+            isTypingActive = false
+            suggestions = dictionaryManager.getDefaultSuggestions(activeLanguage)
+            return
+        }
+
         if (isTranslatorOpen) {
+            val styledCommit = if (activeFancyStyle != FancyFontStyle.NORMAL) {
+                UnicodeTextStyler.styleText(commitValue, activeFancyStyle)
+            } else commitValue
             if (grammarFix != null && composingBuffer.isEmpty() && translatorSourceText.length >= grammarFix.replaceCharLength) {
                 val base = translatorSourceText.dropLast(grammarFix.replaceCharLength)
                 val suffixSpace = if (grammarFix.trailingSpace) " " else " "
-                translatorSourceText = "$base$commitValue$suffixSpace"
+                translatorSourceText = "$base$styledCommit$suffixSpace"
             } else {
                 translatorSourceText = if (composingBuffer.isNotEmpty()) {
-                    "$translatorSourceText$commitValue "
+                    "$translatorSourceText$styledCommit "
                 } else if (lastGlideCommittedWord.isNotEmpty() && translatorSourceText.endsWith("$lastGlideCommittedWord ")) {
-                    translatorSourceText.dropLast(lastGlideCommittedWord.length + 1) + "$commitValue "
+                    translatorSourceText.dropLast(lastGlideCommittedWord.length + 1) + "$styledCommit "
                 } else {
                     val currentToken = translatorSourceText.takeLastWhile { !it.isWhitespace() }
                     val base = if (currentToken.isNotEmpty()) {
@@ -1046,7 +1304,7 @@ class TypeGeniusIME : InputMethodService(),
                     } else {
                         translatorSourceText
                     }
-                    "$base$commitValue "
+                    "$base$styledCommit "
                 }
             }
             composingBuffer = ""
@@ -1104,6 +1362,7 @@ class TypeGeniusIME : InputMethodService(),
             }
         }
         updateAutoCapitalizeState()
+        refreshHandwritingLiveText()
         updateSuggestions()
     }
 
@@ -1135,6 +1394,7 @@ class TypeGeniusIME : InputMethodService(),
             lastDeletedUndoText = top + lastDeletedUndoText
             composingBuffer = ""
             isTypingActive = false
+            refreshHandwritingLiveText()
             updateSuggestions()
             return
         }
@@ -1152,6 +1412,7 @@ class TypeGeniusIME : InputMethodService(),
             lastDeletedUndoText = deletedChunk + lastDeletedUndoText
         }
         updateAutoCapitalizeState()
+        refreshHandwritingLiveText()
         updateSuggestions()
     }
 
@@ -1165,6 +1426,7 @@ class TypeGeniusIME : InputMethodService(),
         } else {
             currentInputConnection?.commitText(toRestore, 1)
             updateAutoCapitalizeState()
+            refreshHandwritingLiveText()
             updateSuggestions()
         }
     }
@@ -1209,6 +1471,7 @@ class TypeGeniusIME : InputMethodService(),
                 recordCommittedWordMetrics(rawTop, priorText)
                 suggestions = candidates
                 updateAutoCapitalizeState()
+                refreshHandwritingLiveText()
             }
 
             if (!isIncognitoEnabled) {
@@ -1249,6 +1512,10 @@ class TypeGeniusIME : InputMethodService(),
     }
 
     private fun transformLastWordWithStyle(style: FancyFontStyle) {
+        if (style.isHandwritingFont) {
+            sendFancyStyleCard(style, HandwritingPaperTheme.NOTEBOOK)
+            return
+        }
         if (isTranslatorOpen) {
             val trimmed = translatorSourceText.trimEnd()
             val lastWord = trimmed.takeLastWhile { !it.isWhitespace() }
@@ -1269,6 +1536,7 @@ class TypeGeniusIME : InputMethodService(),
             ic.commitText(UnicodeTextStyler.styleText(selected, style), 1)
             lastTypedWordPreview = UnicodeTextStyler.unstyleToPlain(selected)
             viewMode = KeyboardViewMode.LETTERS
+            refreshHandwritingLiveText()
             return
         }
 
@@ -1283,6 +1551,7 @@ class TypeGeniusIME : InputMethodService(),
         } else {
             ic.commitText(UnicodeTextStyler.styleText("TypeGenius", style), 1)
         }
+        refreshHandwritingLiveText()
         viewMode = KeyboardViewMode.LETTERS
     }
 
@@ -1305,7 +1574,9 @@ class TypeGeniusIME : InputMethodService(),
 
     private fun selectLanguage(language: LanguageId) {
         activeLanguage = language
-        viewMode = KeyboardViewMode.LETTERS
+        if (panelInputTarget == PanelTextInputTarget.NONE) {
+            viewMode = KeyboardViewMode.LETTERS
+        }
         composingBuffer = ""
         isTypingActive = false
         isShifted = false
@@ -1314,6 +1585,10 @@ class TypeGeniusIME : InputMethodService(),
 
         serviceScope.launch {
             settingsManager.setActiveLanguageCode(language.code)
+            val pkg = currentAppPackage
+            if (perAppSmartLanguageEnabled && !isSensitiveLockedField && !pkg.isNullOrBlank()) {
+                settingsManager.saveLanguageForPackage(pkg, language.code)
+            }
             updateSuggestions()
         }
     }
@@ -1509,5 +1784,225 @@ class TypeGeniusIME : InputMethodService(),
             }
             startActivity(chooser)
         } catch (_: Exception) {}
+    }
+
+    private fun getPanelTargetText(): String = when (panelInputTarget) {
+        PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery
+        PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery
+        PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText
+        PanelTextInputTarget.NONE -> ""
+    }
+
+    private fun setPanelTargetText(value: String) {
+        val capped = value.take(64)
+        when (panelInputTarget) {
+            PanelTextInputTarget.CLIPBOARD_SEARCH -> clipboardSearchQuery = capped
+            PanelTextInputTarget.GIF_SEARCH -> gifSearchQuery = capped
+            PanelTextInputTarget.STICKER_CUSTOM_TEXT -> customStickerText = capped
+            PanelTextInputTarget.NONE -> {}
+        }
+    }
+
+    private fun handlePanelInputKeyAction(action: KeyAction) {
+        when (action.type) {
+            KeyType.CHARACTER -> {
+                val ch = action.label
+                if (activeLanguage == LanguageId.BANGLA_PHONETIC && ch.length == 1 && (ch[0] in 'a'..'z' || ch[0] in 'A'..'Z')) {
+                    val prevRendered = if (composingBuffer.isEmpty()) "" else {
+                        BengaliPhoneticParser.parsePhonetic(composingBuffer).firstOrNull() ?: composingBuffer
+                    }
+                    composingBuffer += ch
+                    val cands = BengaliPhoneticParser.parsePhonetic(composingBuffer)
+                    val nextRendered = cands.firstOrNull { c -> c.any { it in '\u0980'..'\u09FF' } }
+                        ?: cands.firstOrNull()
+                        ?: composingBuffer
+                    val current = getPanelTargetText()
+                    val base = if (prevRendered.isNotEmpty() && current.endsWith(prevRendered)) {
+                        current.dropLast(prevRendered.length)
+                    } else current
+                    setPanelTargetText(base + nextRendered)
+                    suggestions = cands
+                    if (isShifted && !isCapsLock) isShifted = false
+                } else {
+                    composingBuffer = ""
+                    setPanelTargetText(getPanelTargetText() + ch)
+                    if (isShifted && !isCapsLock) isShifted = false
+                }
+            }
+            KeyType.SPACEBAR -> {
+                composingBuffer = ""
+                setPanelTargetText(getPanelTargetText() + " ")
+            }
+            KeyType.BACKSPACE -> {
+                if (composingBuffer.isNotEmpty()) {
+                    val prevRendered = BengaliPhoneticParser.parsePhonetic(composingBuffer).firstOrNull() ?: composingBuffer
+                    composingBuffer = composingBuffer.dropLast(1)
+                    val current = getPanelTargetText()
+                    val base = if (prevRendered.isNotEmpty() && current.endsWith(prevRendered)) {
+                        current.dropLast(prevRendered.length)
+                    } else current.dropLast(1)
+                    val nextRendered = if (composingBuffer.isEmpty()) "" else {
+                        BengaliPhoneticParser.parsePhonetic(composingBuffer).firstOrNull() ?: composingBuffer
+                    }
+                    setPanelTargetText(base + nextRendered)
+                    suggestions = if (composingBuffer.isEmpty()) emptyList() else BengaliPhoneticParser.parsePhonetic(composingBuffer)
+                } else {
+                    val cur = getPanelTargetText()
+                    if (cur.isNotEmpty()) {
+                        setPanelTargetText(cur.dropLast(1))
+                    }
+                }
+            }
+            KeyType.SHIFT -> {
+                if (isShifted) {
+                    if (isCapsLock) {
+                        isCapsLock = false
+                        isShifted = false
+                    } else {
+                        isCapsLock = true
+                    }
+                } else {
+                    isShifted = true
+                }
+            }
+            KeyType.LANGUAGE_SWITCH -> cycleLanguage(forward = true)
+            KeyType.ENTER -> {
+                composingBuffer = ""
+                panelInputTarget = PanelTextInputTarget.NONE
+            }
+            else -> {}
+        }
+    }
+
+    private fun refreshHandwritingLiveText() {
+        val raw = if (isTranslatorOpen) {
+            translatorSourceText + translatorComposingPreview
+        } else {
+            val ic = currentInputConnection
+            val before = ic?.getTextBeforeCursor(200, 0)?.toString().orEmpty()
+            if (before.isNotBlank()) before
+            else if (composingBuffer.isNotEmpty()) {
+                suggestions.firstOrNull { !it.startsWith("✓ ") } ?: composingBuffer
+            } else ""
+        }
+        val clean = raw.trimEnd('\r')
+        val activeLine = if (clean.contains('\n')) clean.substringAfterLast('\n') else clean
+        handwritingLiveText = activeLine.ifBlank { clean }.takeLast(160)
+    }
+
+    private fun sendFancyStyleCard(style: FancyFontStyle, paperTheme: HandwritingPaperTheme) {
+        if (style == FancyFontStyle.HANDWRITING_CUSTOM && !CustomFontManager.hasCustomFont(customFontPathCache)) {
+            Toast.makeText(
+                this,
+                "আগে সেটিংস থেকে আপনার হাতের লেখা (.zip/.ttf) ফন্ট ইমপোর্ট করুন",
+                Toast.LENGTH_LONG
+            ).show()
+            openCompanionSettings()
+            return
+        }
+        val ic = currentInputConnection
+        if (composingBuffer.isNotEmpty() && !isTranslatorOpen) {
+            commitComposing()
+        }
+        val draft = handwritingLiveText.trim().ifBlank {
+            readFieldTextForAi().trim().take(240)
+        }
+        if (draft.isBlank()) {
+            Toast.makeText(this, "হাতের লেখায় পাঠাতে আগে কিছু লিখুন", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val file = HandwritingOutputGenerator.generateHandwritingPngFile(
+                context = this,
+                rawText = draft,
+                style = style,
+                customFontPath = customFontPathCache,
+                customFontName = customFontNameCache,
+                paperTheme = paperTheme
+            )
+            sendMediaFile(
+                file = file,
+                mimeType = "image/png",
+                shareOnly = false,
+                fallbackText = draft,
+                draftTextToClearOnDirectCommit = if (!isTranslatorOpen && ic != null) draft else ""
+            )
+        } catch (_: Exception) {
+            Toast.makeText(this, "হাতের লেখা কার্ড তৈরি করা যায়নি", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun sendMediaFile(
+        file: File,
+        mimeType: String,
+        shareOnly: Boolean,
+        fallbackText: String,
+        draftTextToClearOnDirectCommit: String = ""
+    ) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val editorInfo = currentInputEditorInfo
+            val ic = currentInputConnection
+
+            var committedDirect = false
+            if (!shareOnly && editorInfo != null && ic != null) {
+                val targetPkg = editorInfo.packageName
+                if (!targetPkg.isNullOrBlank()) {
+                    runCatching {
+                        grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                }
+                val supportedMimes = EditorInfoCompat.getContentMimeTypes(editorInfo)
+                val acceptsMime = supportedMimes.any { m ->
+                    m.equals(mimeType, ignoreCase = true) ||
+                        m.equals("image/*", ignoreCase = true) ||
+                        m.equals("*/*", ignoreCase = true)
+                }
+                if (acceptsMime) {
+                    val contentInfo = InputContentInfoCompat(
+                        uri,
+                        ClipDescription(fallbackText.ifBlank { "TypeGenius Media" }, arrayOf(mimeType)),
+                        null
+                    )
+                    committedDirect = InputConnectionCompat.commitContent(
+                        ic,
+                        editorInfo,
+                        contentInfo,
+                        InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION,
+                        null
+                    )
+                }
+            }
+
+            if (committedDirect) {
+                if (draftTextToClearOnDirectCommit.isNotBlank() && ic != null) {
+                    val before = ic.getTextBeforeCursor(draftTextToClearOnDirectCommit.length + 8, 0)?.toString().orEmpty()
+                    if (before.endsWith(draftTextToClearOnDirectCommit)) {
+                        ic.deleteSurroundingText(draftTextToClearOnDirectCommit.length, 0)
+                        refreshHandwritingLiveText()
+                    }
+                }
+                viewMode = KeyboardViewMode.LETTERS
+                Toast.makeText(this, "হাতের লেখা চ্যাটে পাঠানো হয়েছে ✓", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(contentResolver, "TypeGenius Media", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(sendIntent, "WhatsApp / Messenger-এ শেয়ার করুন").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(chooser)
+            viewMode = KeyboardViewMode.LETTERS
+        } catch (_: Exception) {
+            if (fallbackText.isNotBlank()) {
+                currentInputConnection?.commitText(fallbackText, 1)
+                Toast.makeText(this, "অ্যাপটি মিডিয়া সাপোর্ট না করায় টেক্সট বসানো হয়েছে", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }

@@ -52,10 +52,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import com.example.data.CustomFontManager
 import com.example.data.SettingsManager
 import com.example.data.dictionary.FancyFontStyle
 import com.example.data.dictionary.FontCategory
 import com.example.data.dictionary.UnicodeTextStyler
+import com.example.ui.keyboard.HandwritingOutputGenerator
+import com.example.ui.keyboard.HandwritingPaperTheme
 import com.example.ui.theme.TGMagenta
 import kotlinx.coroutines.launch
 
@@ -64,8 +68,11 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val activeFont by settingsManager.activeFancyFontStyle.collectAsState(initial = FancyFontStyle.NORMAL)
+    val customFontPath by settingsManager.customFontPath.collectAsState(initial = "")
+    val customFontName by settingsManager.customFontName.collectAsState(initial = "")
+    val hasCustomFont = remember(customFontPath) { CustomFontManager.hasCustomFont(customFontPath) }
 
-    var inputText by remember { mutableStateOf("TypeGenius বাংলা") }
+    var inputText by remember { mutableStateOf("TypeGenius আমার বাংলা") }
     var selectedCategory by remember { mutableStateOf(FontCategory.ALL) }
     var showAll by remember { mutableStateOf(false) }
 
@@ -76,7 +83,7 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
             FancyFontStyle.entries.filter { it.category == selectedCategory }
         }
     }
-    val visibleStyles = if (showAll) filteredStyles else filteredStyles.take(8)
+    val visibleStyles = if (showAll) filteredStyles else filteredStyles.take(10)
 
     ElevatedCard(
         shape = RoundedCornerShape(20.dp),
@@ -161,6 +168,16 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                 visibleStyles.forEach { style ->
                     val isActive = activeFont == style
                     val rendered = UnicodeTextStyler.styleText(inputText.ifBlank { "TypeGenius" }, style)
+                    val presetId = style.handwritingPresetId()
+                    val rowFontFamily = remember(presetId, customFontPath) {
+                        if (presetId != null) CustomFontManager.getFontFamily(context, presetId, customFontPath)
+                        else androidx.compose.ui.text.font.FontFamily.Default
+                    }
+                    val displayLabel = if (style == FancyFontStyle.HANDWRITING_CUSTOM && hasCustomFont && customFontName.isNotBlank()) {
+                        customFontName
+                    } else {
+                        style.displayName
+                    }
 
                     Row(
                         modifier = Modifier
@@ -175,13 +192,23 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                                 else Modifier
                             )
                             .clickable {
-                                scope.launch {
-                                    settingsManager.setActiveFancyFontStyle(
-                                        if (isActive) FancyFontStyle.NORMAL else style
-                                    )
+                                if (style == FancyFontStyle.HANDWRITING_CUSTOM && !hasCustomFont) {
                                     Toast.makeText(
                                         context,
-                                        if (isActive) "Keyboard font reset to Normal" else "Keyboard font set: ${style.displayName}",
+                                        "উপরে 'হাতের লেখা ফন্ট' কার্ড থেকে আপনার .zip বা .ttf ফন্ট ইমপোর্ট করুন",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    return@clickable
+                                }
+                                scope.launch {
+                                    val nextStyle = if (isActive) FancyFontStyle.NORMAL else style
+                                    settingsManager.setActiveFancyFontStyle(nextStyle)
+                                    if (!isActive && presetId != null) {
+                                        settingsManager.setKeyboardFontId(presetId)
+                                    }
+                                    Toast.makeText(
+                                        context,
+                                        if (isActive) "নরমাল ফন্টে ফিরে এসেছে" else "কিবোর্ড ফন্ট সেট: $displayLabel",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
@@ -194,7 +221,8 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                         Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
                             Text(
                                 text = rendered,
-                                fontSize = 14.sp,
+                                fontFamily = rowFontFamily,
+                                fontSize = if (style.isHandwritingFont) 17.sp else 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
@@ -202,11 +230,18 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                             )
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
-                                    text = style.displayName,
+                                    text = displayLabel,
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (isActive) {
+                                if (style == FancyFontStyle.HANDWRITING_CUSTOM && !hasCustomFont) {
+                                    Text(
+                                        text = "• ইমপোর্ট প্রয়োজন",
+                                        fontSize = 9.sp,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                } else if (isActive) {
                                     Text(
                                         text = "• ACTIVE ON KEYBOARD",
                                         fontSize = 9.sp,
@@ -231,7 +266,7 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                                 onClick = {
                                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                     cm?.setPrimaryClip(ClipData.newPlainText("Styled Text", rendered))
-                                    Toast.makeText(context, "Copied: $rendered", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "কপি হয়েছে: $rendered", Toast.LENGTH_SHORT).show()
                                 },
                                 modifier = Modifier.size(44.dp)
                             ) {
@@ -244,11 +279,36 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                             }
                             IconButton(
                                 onClick = {
-                                    val send = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, rendered)
+                                    if (style.isHandwritingFont) {
+                                        if (style == FancyFontStyle.HANDWRITING_CUSTOM && !hasCustomFont) {
+                                            Toast.makeText(context, "আগে কাস্টম ফন্ট ইমপোর্ট করুন", Toast.LENGTH_SHORT).show()
+                                            return@IconButton
+                                        }
+                                        runCatching {
+                                            val file = HandwritingOutputGenerator.generateHandwritingPngFile(
+                                                context = context,
+                                                rawText = rendered,
+                                                style = style,
+                                                customFontPath = customFontPath,
+                                                customFontName = customFontName,
+                                                paperTheme = HandwritingPaperTheme.NOTEBOOK
+                                            )
+                                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                            val send = Intent(Intent.ACTION_SEND).apply {
+                                                type = "image/png"
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                clipData = ClipData.newUri(context.contentResolver, "Handwriting Output", uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(Intent.createChooser(send, "হাতের লেখায় শেয়ার করুন"))
+                                        }
+                                    } else {
+                                        val send = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_TEXT, rendered)
+                                        }
+                                        context.startActivity(Intent.createChooser(send, "Share Styled Text"))
                                     }
-                                    context.startActivity(Intent.createChooser(send, "Share Styled Text"))
                                 },
                                 modifier = Modifier.size(44.dp)
                             ) {
@@ -264,7 +324,7 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                 }
             }
 
-            if (filteredStyles.size > 8) {
+            if (filteredStyles.size > 10) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -275,7 +335,7 @@ fun StylishFontStudioCard(settingsManager: SettingsManager) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (showAll) "Show Fewer Fonts" else "Show All ${filteredStyles.size} Fonts →",
+                        text = if (showAll) "কম দেখান" else "সব ${filteredStyles.size}টি ফন্ট দেখুন →",
                         color = TGMagenta,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold

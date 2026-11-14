@@ -73,6 +73,12 @@ class SettingsManager(private val context: Context) {
         val KEY_NOTEPAD_DRAFT = stringPreferencesKey("notepad_draft")
         val KEY_USER_TEMPLATES = stringPreferencesKey("user_templates")
         val KEY_DOWNLOADED_TRANSLATOR_PACKS = stringSetPreferencesKey("downloaded_translator_packs")
+        val KEY_SOUND_VOLUME = floatPreferencesKey("sound_volume_scale")
+        val KEY_OTP_EXPIRE_MINUTES = intPreferencesKey("otp_auto_expire_minutes")
+        val KEY_PER_APP_SMART_LANG = booleanPreferencesKey("per_app_smart_language_enabled")
+        val KEY_PER_APP_LANG_MAP = stringPreferencesKey("per_app_language_map_json")
+        val KEY_FLOATING_OFFSET_X = floatPreferencesKey("floating_offset_x")
+        val KEY_FLOATING_OFFSET_Y = floatPreferencesKey("floating_offset_y")
 
         val DEFAULT_USER_TEMPLATES: List<String> = listOf(
             "আসসালামু আলাইকুম, কেমন আছেন?",
@@ -499,5 +505,138 @@ class SettingsManager(private val context: Context) {
             val current = prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] ?: emptySet()
             prefs[KEY_DOWNLOADED_TRANSLATOR_PACKS] = current - code
         }
+    }
+
+    suspend fun setUserTemplates(templates: List<String>) {
+        val clean = templates.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(25)
+        context.dataStore.edit { it[KEY_USER_TEMPLATES] = clean.joinToString("\u001E") }
+    }
+
+    val soundVolume: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_SOUND_VOLUME] ?: 0.75f).coerceIn(0f, 1f)
+    }
+
+    suspend fun setSoundVolume(volume: Float) {
+        context.dataStore.edit { it[KEY_SOUND_VOLUME] = volume.coerceIn(0f, 1f) }
+    }
+
+    val otpAutoExpireMinutes: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_OTP_EXPIRE_MINUTES] ?: 3).coerceIn(0, 15)
+    }
+
+    suspend fun setOtpAutoExpireMinutes(minutes: Int) {
+        context.dataStore.edit { it[KEY_OTP_EXPIRE_MINUTES] = minutes.coerceIn(0, 15) }
+    }
+
+    val perAppSmartLanguageEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_PER_APP_SMART_LANG] ?: true
+    }
+
+    suspend fun setPerAppSmartLanguageEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_PER_APP_SMART_LANG] = enabled }
+    }
+
+    val perAppLanguageMapJson: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_PER_APP_LANG_MAP] ?: ""
+    }
+
+    suspend fun setPerAppLanguageMapJson(json: String) {
+        context.dataStore.edit { it[KEY_PER_APP_LANG_MAP] = json }
+    }
+
+    val perAppLanguageMap: Flow<Map<String, String>> = perAppLanguageMapJson.map { raw ->
+        parsePerAppMap(raw)
+    }
+
+    suspend fun saveLanguageForPackage(packageName: String, langCode: String) {
+        val pkg = packageName.trim().lowercase()
+        if (pkg.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val map = parsePerAppMap(prefs[KEY_PER_APP_LANG_MAP].orEmpty()).toMutableMap()
+            map[pkg] = langCode
+            val obj = org.json.JSONObject()
+            map.entries.take(60).forEach { (k, v) -> obj.put(k, v) }
+            prefs[KEY_PER_APP_LANG_MAP] = obj.toString()
+        }
+    }
+
+    suspend fun clearPerAppLanguages() {
+        context.dataStore.edit { it[KEY_PER_APP_LANG_MAP] = "" }
+    }
+
+    val floatingOffsetX: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FLOATING_OFFSET_X] ?: 0f
+    }
+
+    val floatingOffsetY: Flow<Float> = context.dataStore.data.map { prefs ->
+        prefs[KEY_FLOATING_OFFSET_Y] ?: 0f
+    }
+
+    suspend fun setFloatingOffsets(x: Float, y: Float) {
+        context.dataStore.edit {
+            it[KEY_FLOATING_OFFSET_X] = x
+            it[KEY_FLOATING_OFFSET_Y] = y
+        }
+    }
+
+    fun resolveSmartLanguageForPackage(
+        packageName: String?,
+        savedPerAppMap: Map<String, String>,
+        enabledLangs: List<LanguageId>,
+        currentLang: LanguageId
+    ): LanguageId? {
+        val pkg = packageName?.trim()?.lowercase().orEmpty()
+        if (pkg.isEmpty()) return null
+
+        val savedCode = savedPerAppMap[pkg] ?: savedPerAppMap[packageName.orEmpty()]
+        if (!savedCode.isNullOrBlank()) {
+            val match = enabledLangs.find { it.code == savedCode }
+            if (match != null) return match
+        }
+
+        val chatPackages = listOf(
+            "com.whatsapp", "com.facebook.orca", "com.facebook.katana",
+            "org.telegram.messenger", "com.imo.android.imoim", "com.viber.voip",
+            "com.instagram.android", "com.google.android.apps.messaging", "com.android.mms"
+        )
+        val browserSearchPackages = listOf(
+            "com.android.chrome", "org.mozilla.firefox", "com.microsoft.emmx",
+            "com.opera.browser", "com.brave.browser", "com.google.android.googlequicksearchbox",
+            "com.google.android.gm", "com.android.vending", "com.github.android",
+            "com.google.android.youtube"
+        )
+
+        if (chatPackages.any { pkg.startsWith(it) }) {
+            val banglaPriority = listOf(
+                LanguageId.BANGLA_PHONETIC,
+                LanguageId.BANGLA_PROBHAT,
+                LanguageId.BANGLA_NATIONAL,
+                LanguageId.BANGLA_UNIBIJOY
+            )
+            val banglaPreferred = banglaPriority.firstOrNull { it in enabledLangs }
+            return banglaPreferred ?: currentLang
+        }
+
+        if (browserSearchPackages.any { pkg.startsWith(it) }) {
+            return enabledLangs.find { it == LanguageId.ENGLISH || it == LanguageId.ENGLISH_UK }
+                ?: LanguageId.ENGLISH
+        }
+
+        return null
+    }
+
+    private fun parsePerAppMap(raw: String): Map<String, String> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            buildMap {
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val v = obj.optString(k)
+                    if (k.isNotBlank() && v.isNotBlank()) put(k, v)
+                }
+            }
+        }.getOrDefault(emptyMap())
     }
 }

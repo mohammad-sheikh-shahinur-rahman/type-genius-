@@ -124,4 +124,14 @@ object SmartClipboardParser {
     fun isHighPrioritySmartClip(info: SmartClipInfo): Boolean {
         return info.type != SmartClipType.TEXT && info.extractedValue.isNotBlank()
     }
+
+    fun isSensitiveForAutoExpire(rawText: String, info: SmartClipInfo = classify(rawText)): Boolean {
+        if (info.type == SmartClipType.OTP) return true
+        val lower = rawText.lowercase()
+        val sensitiveKeywords = listOf(
+            "cvv", "cvc", "pin", "otp", "passcode", "password", "পাসওয়ার্ড",
+            "বিকাশ পিন", "নগদ পিন", "রকেট পিন", "ওটিপি", "secret", "2fa"
+        )
+        return sensitiveKeywords.any { lower.contains(it) } && rawText.any { it.isDigit() }
+    }
 }

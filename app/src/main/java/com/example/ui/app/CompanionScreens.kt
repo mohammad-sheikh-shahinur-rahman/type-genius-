@@ -62,6 +62,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -84,9 +86,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.BengaliCalendarUtils
 import com.example.data.SettingsManager
 import com.example.data.ai.GeminiDirectClient
 import com.example.data.local.TypeGeniusDatabase
+import kotlin.math.roundToInt
 import com.example.data.translator.OfflineTranslator
 import com.example.model.KeyboardHeightPreset
 import com.example.model.KeyboardTheme
@@ -1069,6 +1073,7 @@ fun GeneralSettingsScreen(
     val currentTheme by settingsManager.keyboardTheme.collectAsState(initial = KeyboardTheme.MATERIAL_YOU)
     val numberRowEnabled by settingsManager.numberRowEnabled.collectAsState(initial = false)
     val soundOnKeyPress by settingsManager.soundOnKeyPress.collectAsState(initial = false)
+    val soundVolume by settingsManager.soundVolume.collectAsState(initial = 0.75f)
     val soundProfile by settingsManager.soundProfile.collectAsState(initial = SoundProfile.SYSTEM)
     val vibrationStrength by settingsManager.vibrationStrength.collectAsState(initial = VibrationStrength.MEDIUM)
     val isIncognitoMode by settingsManager.isIncognitoMode.collectAsState(initial = false)
@@ -1203,8 +1208,27 @@ fun GeneralSettingsScreen(
                     )
 
                     AnimatedVisibility(visible = soundOnKeyPress) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Sound Profile", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("সাউন্ড ভলিউম", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    text = "${BengaliCalendarUtils.toBengaliDigits((soundVolume * 100).roundToInt().toString())}%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TGMagenta
+                                )
+                            }
+                            Slider(
+                                value = soundVolume,
+                                onValueChange = { vol -> scope.launch { settingsManager.setSoundVolume(vol) } },
+                                valueRange = 0f..1f,
+                                colors = SliderDefaults.colors(thumbColor = TGMagenta, activeTrackColor = TGMagenta)
+                            )
+                            Text("সাউন্ড প্রোফাইল", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1437,10 +1461,12 @@ fun GeneralSettingsScreen(
                         ThemeCard()
                         PhotoBackgroundThemeCard(settingsManager = settingsManager)
                         ToolbarCustomizerCard(settingsManager = settingsManager)
+                        SmartAutomationAndPrivacyCard(settingsManager = settingsManager)
                         AboutCompanyCard()
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TypingPreferencesCard()
+                        OfflineBackupRestoreCard(settingsManager = settingsManager)
                         PersonalDictionaryCard()
                         PersonalShortcutsCard()
                         CustomAiPromptsCard(settingsManager = settingsManager)
@@ -1451,6 +1477,8 @@ fun GeneralSettingsScreen(
                 ThemeCard()
                 PhotoBackgroundThemeCard(settingsManager = settingsManager)
                 TypingPreferencesCard()
+                SmartAutomationAndPrivacyCard(settingsManager = settingsManager)
+                OfflineBackupRestoreCard(settingsManager = settingsManager)
                 ToolbarCustomizerCard(settingsManager = settingsManager)
                 PersonalDictionaryCard()
                 PersonalShortcutsCard()

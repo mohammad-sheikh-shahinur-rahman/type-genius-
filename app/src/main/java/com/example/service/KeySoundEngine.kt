@@ -77,7 +77,9 @@ class KeySoundEngine private constructor(context: Context) {
         }
     }
 
-    fun play(profile: SoundProfile, keyType: KeyType) {
+    fun play(profile: SoundProfile, keyType: KeyType, volumeScale: Float = 1.0f) {
+        val clampedScale = volumeScale.coerceIn(0f, 1f)
+        if (clampedScale <= 0.01f) return
         val variant = resolveVariant(profile, keyType)
         val pool = soundPool
         val sampleId = soundIdMap[profile to variant] ?: soundIdMap[profile to "std"]
@@ -89,7 +91,7 @@ class KeySoundEngine private constructor(context: Context) {
             else -> 1.0f
         }
 
-        val gain = (profile.volume * 1.15f).coerceIn(0.35f, 1.0f)
+        val gain = (profile.volume * 1.15f * clampedScale).coerceIn(0.08f, 1.0f)
 
         if (pool != null && sampleId != null && loadedSampleIds.contains(sampleId)) {
             val streamId = runCatching {

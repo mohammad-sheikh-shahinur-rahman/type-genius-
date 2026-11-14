@@ -16,6 +16,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +41,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
@@ -46,8 +49,10 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.Mood
@@ -58,6 +63,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -69,6 +75,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -123,8 +130,11 @@ import com.example.model.KeyboardToolId
 import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
 import com.example.model.OneHandedMode
+import com.example.model.PanelTextInputTarget
+import com.example.model.SoundProfile
 import com.example.model.SwipeSensitivity
 import com.example.model.VibrationStrength
+import com.example.service.KeySoundEngine
 import com.example.service.VoiceInputController
 import java.io.File
 import kotlin.math.hypot
@@ -170,9 +180,11 @@ fun KeyboardView(
     onOpenSettings: () -> Unit,
     onShareApp: () -> Unit,
     onClipboardItemClick: (String) -> Unit,
+    onCopyClipboardItem: (ClipboardItem) -> Unit = {},
     onTogglePinClipboardItem: (ClipboardItem) -> Unit,
     onDeleteClipboardItem: (ClipboardItem) -> Unit,
     onClearClipboard: () -> Unit,
+    onClearEverythingClipboard: () -> Unit = {},
     onMoveCursor: (dx: Int, dy: Int, select: Boolean) -> Unit,
     onMoveToStart: (select: Boolean) -> Unit,
     onMoveToEnd: (select: Boolean) -> Unit,
@@ -185,7 +197,10 @@ fun KeyboardView(
     onGlideCommitted: (trail: List<Pair<Float, Float>>, keyCenters: Map<String, Pair<Float, Float>>) -> Unit = { _, _ -> },
     onSelectFancyStyle: (FancyFontStyle) -> Unit = {},
     onTransformLastWord: (FancyFontStyle) -> Unit = {},
+    onSendFancyStyleCard: (FancyFontStyle, HandwritingPaperTheme) -> Unit = { _, _ -> },
+    onOpenHandwritingImport: () -> Unit = {},
     onInsertTextSnippet: (String) -> Unit = {},
+    handwritingLiveText: String = "",
     aiSourceText: String = "",
     canUndoAiEdit: Boolean = false,
     liveGrammarIssueCount: Int = 0,
@@ -195,6 +210,14 @@ fun KeyboardView(
     onRefreshAiSourceText: () -> String = { "" },
     onApplyAiText: (String) -> Unit = {},
     onUndoAiText: () -> Unit = {},
+    panelInputTarget: PanelTextInputTarget = PanelTextInputTarget.NONE,
+    clipboardSearchQuery: String = "",
+    gifSearchQuery: String = "",
+    customStickerText: String = "অস্থির হইছে বস!",
+    onSetPanelInputTarget: (PanelTextInputTarget) -> Unit = {},
+    onClearPanelSearchQuery: (PanelTextInputTarget) -> Unit = {},
+    onCustomStickerTextChange: (String) -> Unit = {},
+    onSendMediaFile: (file: File, mimeType: String, shareOnly: Boolean, fallbackText: String) -> Unit = { _, _, _, _ -> },
     voiceController: VoiceInputController? = null,
     modifier: Modifier = Modifier
 ) {
@@ -216,6 +239,13 @@ fun KeyboardView(
     val oneHandedMode by settingsManager.oneHandedMode.collectAsState(initial = OneHandedMode.FULL)
     val heightPreset by settingsManager.keyboardHeightPreset.collectAsState(initial = KeyboardHeightPreset.NORMAL)
     val floatingMode by settingsManager.floatingMode.collectAsState(initial = false)
+    val floatingOffsetXSaved by settingsManager.floatingOffsetX.collectAsState(initial = 0f)
+    val floatingOffsetYSaved by settingsManager.floatingOffsetY.collectAsState(initial = 0f)
+    val soundOnKeyPress by settingsManager.soundOnKeyPress.collectAsState(initial = false)
+    val soundVolume by settingsManager.soundVolume.collectAsState(initial = 0.75f)
+    val soundProfile by settingsManager.soundProfile.collectAsState(initial = SoundProfile.SYSTEM)
+    val otpAutoExpireMinutes by settingsManager.otpAutoExpireMinutes.collectAsState(initial = 3)
+    val perAppSmartLanguageEnabled by settingsManager.perAppSmartLanguageEnabled.collectAsState(initial = true)
     val translatorSrc by settingsManager.translatorSourceCode.collectAsState(initial = "bn")
     val translatorTgt by settingsManager.translatorTargetCode.collectAsState(initial = "en")
     val geminiApiKey by settingsManager.geminiApiKey.collectAsState(initial = "")
@@ -238,9 +268,11 @@ fun KeyboardView(
     val customAiPrompts by settingsManager.customAiPrompts.collectAsState(initial = emptyList())
     val notepadDraft by settingsManager.notepadDraft.collectAsState(initial = "")
     val userTemplates by settingsManager.userTemplates.collectAsState(initial = SettingsManager.DEFAULT_USER_TEMPLATES)
-    val activeKeyboardFontFamily = remember(keyboardFontId, customFontPath) {
-        CustomFontManager.getFontFamily(context, keyboardFontId, customFontPath)
+    val activeKeyboardFontFamily = remember(keyboardFontId, customFontPath, activeFancyStyle) {
+        val effectiveId = activeFancyStyle.handwritingPresetId() ?: keyboardFontId
+        CustomFontManager.getFontFamily(context, effectiveId, customFontPath)
     }
+    var selectedPaperTheme by remember { mutableStateOf(HandwritingPaperTheme.NOTEBOOK) }
 
     val wallpaperBitmap = remember(wallpaperPath) {
         if (wallpaperPath.isNotBlank()) {
@@ -370,13 +402,27 @@ fun KeyboardView(
         OneHandedMode.FULL, OneHandedMode.SPLIT -> Alignment.Center
     }
 
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(floatingOffsetXSaved, floatingOffsetYSaved, floatingMode) {
+        if (floatingMode) {
+            dragOffsetX = floatingOffsetXSaved
+            dragOffsetY = floatingOffsetYSaved
+        } else {
+            dragOffsetX = 0f
+            dragOffsetY = 0f
+        }
+    }
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { coords -> rootOriginInRoot = coords.positionInRoot() }
             .then(
                 if (floatingMode) {
-                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    Modifier
+                        .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
+                        .padding(horizontal = 24.dp, vertical = 10.dp)
                 } else {
                     Modifier.padding(bottom = 12.dp)
                 }
@@ -384,8 +430,9 @@ fun KeyboardView(
             .then(
                 if (floatingMode) {
                     Modifier
-                        .shadow(12.dp, RoundedCornerShape(22.dp))
+                        .shadow(14.dp, RoundedCornerShape(22.dp))
                         .clip(RoundedCornerShape(22.dp))
+                        .border(1.dp, colors.accent.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
                 } else {
                     Modifier
                 }
@@ -476,6 +523,85 @@ fun KeyboardView(
                     },
                     onHaptic = { haptic() }
                 )
+            }
+
+            // 0.5 Live Handwriting Output Bar when a Handwriting Font is active
+            if (activeFancyStyle.isHandwritingFont && viewMode == KeyboardViewMode.LETTERS && !isTranslatorOpen) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(selectedPaperTheme.bgStart))
+                        .border(1.dp, colors.accent.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 9.dp, vertical = 6.dp)
+                        .testTag("handwriting_live_output_bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = handwritingLiveText.ifBlank { "হাতের লেখায় পাঠাতে লিখুন..." },
+                            fontFamily = activeKeyboardFontFamily,
+                            color = if (handwritingLiveText.isBlank()) {
+                                Color(selectedPaperTheme.inkColor).copy(alpha = 0.5f)
+                            } else {
+                                Color(selectedPaperTheme.inkColor)
+                            },
+                            fontSize = 15.5.sp,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 3.dp)
+                        ) {
+                            HandwritingPaperTheme.entries.forEach { paper ->
+                                val isPaperSelected = selectedPaperTheme == paper
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(
+                                            if (isPaperSelected) colors.accent
+                                            else Color(selectedPaperTheme.inkColor).copy(alpha = 0.12f)
+                                        )
+                                        .clickable {
+                                            haptic()
+                                            selectedPaperTheme = paper
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = paper.label,
+                                        color = if (isPaperSelected) Color.White else Color(selectedPaperTheme.inkColor),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(colors.accent)
+                            .clickable {
+                                haptic()
+                                onSendFancyStyleCard(activeFancyStyle, selectedPaperTheme)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .testTag("handwriting_send_image_btn")
+                    ) {
+                        Text(
+                            text = "✍️ পাঠান",
+                            color = Color.White,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
 
             // 1. Top Bar (Toolbox / Suggestions / Voice / Translator Listening / Text Editing header)
@@ -624,33 +750,359 @@ fun KeyboardView(
                 }
 
                 KeyboardViewMode.CLIPBOARD -> {
+                    val isSearchTarget = panelInputTarget == PanelTextInputTarget.CLIPBOARD_SEARCH
                     ClipboardPanel(
                         items = clipboardItems,
                         colors = colors,
+                        searchQuery = clipboardSearchQuery,
+                        isSearchActive = isSearchTarget,
+                        otpExpireMinutes = otpAutoExpireMinutes,
+                        onToggleSearch = {
+                            haptic()
+                            onSetPanelInputTarget(
+                                if (isSearchTarget) PanelTextInputTarget.NONE else PanelTextInputTarget.CLIPBOARD_SEARCH
+                            )
+                        },
+                        onClearSearch = {
+                            onClearPanelSearchQuery(PanelTextInputTarget.CLIPBOARD_SEARCH)
+                        },
+                        onCycleOtpExpireMinutes = {
+                            val next = when (otpAutoExpireMinutes) {
+                                3 -> 5
+                                5 -> 0
+                                else -> 3
+                            }
+                            coroutineScope.launch { settingsManager.setOtpAutoExpireMinutes(next) }
+                        },
                         onItemSelected = { text ->
                             haptic()
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
                             onClipboardItemClick(text)
+                        },
+                        onCopyItem = { item ->
+                            haptic()
+                            onCopyClipboardItem(item)
                         },
                         onTogglePin = { item ->
                             haptic()
                             onTogglePinClipboardItem(item)
                         },
-                        onDeleteItem = onDeleteClipboardItem,
-                        onClearAll = onClearClipboard,
+                        onDeleteItem = { item ->
+                            haptic()
+                            onDeleteClipboardItem(item)
+                        },
+                        onClearAll = {
+                            haptic()
+                            onClearClipboard()
+                        },
+                        onClearEverything = {
+                            haptic()
+                            onClearEverythingClipboard()
+                        },
                         onClose = {
                             haptic()
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
                             onSelectViewMode(KeyboardViewMode.LETTERS)
                         }
                     )
+                    if (isSearchTarget) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompactPanelInlineKeyboard(
+                            activeLanguage = activeLanguage,
+                            isShifted = isShifted,
+                            isCapsLock = isCapsLock,
+                            colors = colors,
+                            rowHeight = (responsiveRowHeight * 0.78f).coerceAtLeast(38.dp),
+                            gap = responsiveGap,
+                            hideSecondaryHint = hideLongPressHints,
+                            onKeyAction = { action ->
+                                haptic()
+                                onKeyAction(action)
+                            },
+                            onDone = {
+                                haptic()
+                                onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            }
+                        )
+                    }
+                }
+
+                KeyboardViewMode.GIF -> {
+                    val isGifSearchTarget = panelInputTarget == PanelTextInputTarget.GIF_SEARCH
+                    GifPanel(
+                        colors = colors,
+                        searchQuery = gifSearchQuery,
+                        isSearchActive = isGifSearchTarget,
+                        onToggleSearch = {
+                            haptic()
+                            onSetPanelInputTarget(
+                                if (isGifSearchTarget) PanelTextInputTarget.NONE else PanelTextInputTarget.GIF_SEARCH
+                            )
+                        },
+                        onClearSearch = {
+                            onClearPanelSearchQuery(PanelTextInputTarget.GIF_SEARCH)
+                        },
+                        onSendGifFile = { file, shareOnly, fallback ->
+                            haptic()
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onSendMediaFile(file, "image/gif", shareOnly, fallback)
+                        },
+                        onClose = {
+                            haptic()
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
+                        onHaptic = { haptic() }
+                    )
+                    if (isGifSearchTarget) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompactPanelInlineKeyboard(
+                            activeLanguage = activeLanguage,
+                            isShifted = isShifted,
+                            isCapsLock = isCapsLock,
+                            colors = colors,
+                            rowHeight = (responsiveRowHeight * 0.78f).coerceAtLeast(38.dp),
+                            gap = responsiveGap,
+                            hideSecondaryHint = hideLongPressHints,
+                            onKeyAction = { action ->
+                                haptic()
+                                onKeyAction(action)
+                            },
+                            onDone = {
+                                haptic()
+                                onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            }
+                        )
+                    }
                 }
 
                 KeyboardViewMode.NUMPAD -> {
+                    val isBnFamily = activeLanguage in listOf(
+                        LanguageId.BANGLA_PROBHAT,
+                        LanguageId.BANGLA_PHONETIC,
+                        LanguageId.BANGLA_NATIONAL,
+                        LanguageId.BANGLA_UNIBIJOY,
+                        LanguageId.SYLHETI,
+                        LanguageId.ASSAMESE
+                    )
                     NumpadPanel(
                         colors = colors,
+                        isBengaliDefault = isBnFamily,
                         onKeyAction = onKeyAction,
                         onBackToLetters = { onSelectViewMode(KeyboardViewMode.LETTERS) },
                         onHaptic = { haptic() }
                     )
+                }
+
+                KeyboardViewMode.QUICK_SETTINGS -> {
+                    QuickSettingsPanel(
+                        colors = colors,
+                        heightPortraitPct = heightPortraitPct,
+                        soundEnabled = soundOnKeyPress,
+                        soundVolume = soundVolume,
+                        soundProfile = soundProfile,
+                        oneHandedMode = oneHandedMode,
+                        floatingMode = floatingMode,
+                        isIncognitoMode = isIncognitoMode,
+                        perAppSmartLanguageEnabled = perAppSmartLanguageEnabled,
+                        onHeightPctChange = { pct ->
+                            coroutineScope.launch {
+                                settingsManager.setKeyboardHeightPortrait(pct)
+                                settingsManager.setKeyboardHeightLandscape(pct)
+                            }
+                        },
+                        onToggleSound = { enabled ->
+                            coroutineScope.launch { settingsManager.setSoundOnKeyPress(enabled) }
+                            if (enabled) KeySoundEngine.preview(context, soundProfile)
+                        },
+                        onSoundVolumeChange = { vol ->
+                            coroutineScope.launch { settingsManager.setSoundVolume(vol) }
+                        },
+                        onSelectSoundProfile = { profile ->
+                            coroutineScope.launch { settingsManager.setSoundProfile(profile) }
+                            KeySoundEngine.preview(context, profile)
+                        },
+                        onCycleOneHanded = {
+                            val entries = OneHandedMode.entries
+                            val next = entries[(entries.indexOf(oneHandedMode) + 1) % entries.size]
+                            coroutineScope.launch { settingsManager.setOneHandedMode(next) }
+                        },
+                        onToggleFloating = {
+                            coroutineScope.launch { settingsManager.setFloatingMode(!floatingMode) }
+                        },
+                        onToggleIncognito = {
+                            coroutineScope.launch { settingsManager.setIncognitoMode(!isIncognitoMode) }
+                        },
+                        onTogglePerAppSmartLang = {
+                            coroutineScope.launch {
+                                settingsManager.setPerAppSmartLanguageEnabled(!perAppSmartLanguageEnabled)
+                            }
+                        },
+                        onOpenFullSettings = onOpenSettings,
+                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onHaptic = { haptic() }
+                    )
+                }
+
+                KeyboardViewMode.DEV_MATH_SYMBOLS -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.accent.copy(alpha = 0.16f))
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "Dev & Math",
+                                    color = colors.accent,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            KeyboardLayouts.devMathQuickSnippets.forEach { snippet ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(colors.keySpecialBackground)
+                                        .clickable {
+                                            haptic()
+                                            onInsertTextSnippet(snippet)
+                                        }
+                                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                                        .testTag("dev_math_snippet_$snippet")
+                                ) {
+                                    Text(
+                                        text = snippet,
+                                        color = colors.textPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
+                        KeyboardLayouts.devMathSymbols.forEachIndexed { rIdx, rowKeys ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(responsiveRowHeight)
+                                    .padding(vertical = 1.dp),
+                                horizontalArrangement = Arrangement.spacedBy(responsiveGap)
+                            ) {
+                                rowKeys.forEachIndexed { kIdx, key ->
+                                    KeyView(
+                                        keyAction = key,
+                                        colors = colors,
+                                        hideSecondaryHint = hideLongPressHints,
+                                        alignPopupEnd = kIdx >= rowKeys.size / 2,
+                                        isCompactRow = rIdx < 2,
+                                        modifier = Modifier.weight(key.weight),
+                                        onClick = {
+                                            haptic()
+                                            onKeyAction(key)
+                                        },
+                                        onLongClick = { sec ->
+                                            haptic()
+                                            onKeyAction(KeyAction(sec, null, KeyType.CHARACTER))
+                                        },
+                                        onBackspaceRepeat = if (key.type == KeyType.BACKSPACE) {
+                                            {
+                                                haptic()
+                                                onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE))
+                                            }
+                                        } else null
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(responsiveRowHeight),
+                            horizontalArrangement = Arrangement.spacedBy(responsiveGap),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            KeyView(
+                                keyAction = KeyAction("অক্ষর", null, KeyType.MODE_SWITCH, weight = 1.25f),
+                                colors = colors,
+                                shape = RoundedCornerShape(10.dp),
+                                customBgColor = colors.keySpecialBackground,
+                                modifier = Modifier.weight(1.25f),
+                                onClick = {
+                                    haptic()
+                                    onSelectViewMode(KeyboardViewMode.LETTERS)
+                                }
+                            )
+                            KeyView(
+                                keyAction = KeyAction("()", "{}", KeyType.CHARACTER, weight = 0.9f),
+                                colors = colors,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(0.9f),
+                                onClick = {
+                                    haptic()
+                                    onInsertTextSnippet("()")
+                                },
+                                onLongClick = {
+                                    haptic()
+                                    onInsertTextSnippet("{}")
+                                }
+                            )
+                            SpacebarComponent(
+                                activeLanguage = activeLanguage,
+                                enabledLanguages = enabledLanguages,
+                                isSwipeEnabled = isSwipeEnabled,
+                                swipeSensitivity = swipeSensitivity,
+                                isHapticEnabled = isHapticEnabled,
+                                showLanguageLabel = false,
+                                isLongPressEnabled = false,
+                                backgroundColor = colors.keyBackground,
+                                textColor = colors.textPrimary,
+                                accentColor = colors.accent,
+                                onTapSpace = { onKeyAction(KeyAction(" ", null, KeyType.SPACEBAR)) },
+                                onSwipeNextLanguage = onSwipeNextLanguage,
+                                onSwipePrevLanguage = onSwipePrevLanguage,
+                                onLongPressLanguagePicker = {},
+                                modifier = Modifier.weight(2.8f)
+                            )
+                            KeyView(
+                                keyAction = KeyAction(";", ":", KeyType.CHARACTER, weight = 0.85f),
+                                colors = colors,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(0.85f),
+                                onClick = {
+                                    haptic()
+                                    onKeyAction(KeyAction(";", null, KeyType.CHARACTER))
+                                },
+                                onLongClick = { sec ->
+                                    haptic()
+                                    onKeyAction(KeyAction(sec, null, KeyType.CHARACTER))
+                                }
+                            )
+                            KeyView(
+                                keyAction = KeyAction("↵", null, KeyType.ENTER, weight = 1.3f),
+                                colors = colors,
+                                isEnterKey = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1.3f),
+                                onClick = {
+                                    haptic()
+                                    onKeyAction(KeyAction("↵", null, KeyType.ENTER))
+                                }
+                            )
+                        }
+                    }
                 }
 
                 KeyboardViewMode.TEXT_EDITOR -> {
@@ -699,10 +1151,14 @@ fun KeyboardView(
                     FancyFontsPanel(
                         colors = colors,
                         activeStyle = activeFancyStyle,
-                        sampleWord = lastTypedWordPreview,
+                        sampleWord = handwritingLiveText.ifBlank { lastTypedWordPreview },
+                        customFontPath = customFontPath,
+                        customFontName = customFontName,
                         isBengaliActive = isBengaliLang,
                         onSelectLiveStyle = onSelectFancyStyle,
                         onTransformLastWord = onTransformLastWord,
+                        onSendStyleCard = { style -> onSendFancyStyleCard(style, selectedPaperTheme) },
+                        onOpenHandwritingImport = onOpenHandwritingImport,
                         onInsertSnippet = onInsertTextSnippet,
                         onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
                         onHaptic = { haptic() }
@@ -763,15 +1219,54 @@ fun KeyboardView(
                 }
 
                 KeyboardViewMode.STICKERS_KAOMOJI -> {
+                    val isStickerTextTarget = panelInputTarget == PanelTextInputTarget.STICKER_CUSTOM_TEXT
                     StickersAndKaomojiPanel(
                         colors = colors,
+                        customStickerText = customStickerText,
+                        isEditingCustomText = isStickerTextTarget,
+                        onCustomStickerTextChange = onCustomStickerTextChange,
+                        onToggleCustomTextKeyboard = {
+                            haptic()
+                            onSetPanelInputTarget(
+                                if (isStickerTextTarget) PanelTextInputTarget.NONE else PanelTextInputTarget.STICKER_CUSTOM_TEXT
+                            )
+                        },
                         onInsertText = { text ->
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
                             onInsertTextSnippet(text)
                             onSelectViewMode(KeyboardViewMode.LETTERS)
                         },
-                        onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
+                        onSendStickerImage = { file, shareOnly ->
+                            haptic()
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onSendMediaFile(file, "image/png", shareOnly, customStickerText)
+                        },
+                        onClose = {
+                            onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            onSelectViewMode(KeyboardViewMode.LETTERS)
+                        },
                         onHaptic = { haptic() }
                     )
+                    if (isStickerTextTarget) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompactPanelInlineKeyboard(
+                            activeLanguage = activeLanguage,
+                            isShifted = isShifted,
+                            isCapsLock = isCapsLock,
+                            colors = colors,
+                            rowHeight = (responsiveRowHeight * 0.78f).coerceAtLeast(38.dp),
+                            gap = responsiveGap,
+                            hideSecondaryHint = hideLongPressHints,
+                            onKeyAction = { action ->
+                                haptic()
+                                onKeyAction(action)
+                            },
+                            onDone = {
+                                haptic()
+                                onSetPanelInputTarget(PanelTextInputTarget.NONE)
+                            }
+                        )
+                    }
                 }
 
                 KeyboardViewMode.MORE_TOOLS -> {
@@ -1240,13 +1735,84 @@ fun KeyboardView(
                 }
             }
 
-            // Reserve clean system navigation bar space with generous padding so OS single chin bar never touches or overlaps keys
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .height(16.dp)
-            )
+            if (floatingMode) {
+                // Draggable Floating Keyboard Handle Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 2.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.suggestionBackground)
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-140f, 140f)
+                                    dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-520f, 120f)
+                                },
+                                onDragEnd = {
+                                    coroutineScope.launch {
+                                        settingsManager.setFloatingOffsets(dragOffsetX, dragOffsetY)
+                                    }
+                                }
+                            )
+                        }
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                        .testTag("floating_drag_handle"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Spacer(modifier = Modifier.width(36.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = "ফ্লোটিং কীবোর্ড সরান",
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "ড্র্যাগ করে সরান",
+                            color = colors.textSecondary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(colors.keySpecialBackground)
+                            .clickable {
+                                haptic()
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                coroutineScope.launch {
+                                    settingsManager.setFloatingOffsets(0f, 0f)
+                                    settingsManager.setFloatingMode(false)
+                                }
+                            }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("floating_dock_button")
+                    ) {
+                        Text(
+                            text = "ডক করুন",
+                            color = colors.accent,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                // Reserve clean system navigation bar space with generous padding so OS single chin bar never touches or overlaps keys
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .height(16.dp)
+                )
+            }
         }
         }
 
@@ -1424,7 +1990,103 @@ private fun toolIconForGhost(tool: KeyboardToolId) = when (tool) {
     KeyboardToolId.FLOATING -> Icons.Default.PictureInPictureAlt
     KeyboardToolId.RESIZE -> Icons.Default.AspectRatio
     KeyboardToolId.NUMPAD -> Icons.Default.Dialpad
+    KeyboardToolId.DEV_MATH -> Icons.Default.Code
+    KeyboardToolId.QUICK_SETTINGS -> Icons.Default.Tune
     KeyboardToolId.SHARE -> Icons.Default.Share
+}
+
+@Composable
+private fun CompactPanelInlineKeyboard(
+    activeLanguage: LanguageId,
+    isShifted: Boolean,
+    isCapsLock: Boolean,
+    colors: KeyboardColors,
+    rowHeight: androidx.compose.ui.unit.Dp,
+    gap: androidx.compose.ui.unit.Dp,
+    hideSecondaryHint: Boolean,
+    onKeyAction: (KeyAction) -> Unit,
+    onDone: () -> Unit
+) {
+    val rows = remember(activeLanguage, isShifted, isCapsLock) {
+        KeyboardLayouts.getAlphabetRows(activeLanguage, isShifted || isCapsLock)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.suggestionBackground.copy(alpha = 0.65f))
+            .padding(horizontal = 2.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        rows.forEach { rowKeys ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(rowHeight),
+                horizontalArrangement = Arrangement.spacedBy(gap)
+            ) {
+                rowKeys.forEachIndexed { idx, key ->
+                    KeyView(
+                        keyAction = key,
+                        colors = colors,
+                        isHighlight = key.type == KeyType.SHIFT && (isShifted || isCapsLock),
+                        hideSecondaryHint = hideSecondaryHint,
+                        alignPopupEnd = idx >= rowKeys.size / 2,
+                        isCompactRow = true,
+                        modifier = Modifier.weight(key.weight),
+                        onClick = { onKeyAction(key) },
+                        onLongClick = { sec ->
+                            onKeyAction(KeyAction(sec, null, KeyType.CHARACTER))
+                        },
+                        onBackspaceRepeat = if (key.type == KeyType.BACKSPACE) {
+                            { onKeyAction(KeyAction("⌫", null, KeyType.BACKSPACE)) }
+                        } else null
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height((rowHeight * 0.92f).coerceAtLeast(36.dp)),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            KeyView(
+                keyAction = KeyAction("🌐 ${activeLanguage.spacebarLabel}", null, KeyType.LANGUAGE_SWITCH, weight = 1.4f),
+                colors = colors,
+                customBgColor = colors.keySpecialBackground,
+                modifier = Modifier.weight(1.4f),
+                onClick = { onKeyAction(KeyAction("🌐", null, KeyType.LANGUAGE_SWITCH)) }
+            )
+            KeyView(
+                keyAction = KeyAction("স্পেস", null, KeyType.SPACEBAR, weight = 3.0f),
+                colors = colors,
+                customBgColor = colors.keyBackground,
+                modifier = Modifier.weight(3.0f),
+                onClick = { onKeyAction(KeyAction(" ", null, KeyType.SPACEBAR)) }
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1.3f)
+                    .fillMaxHeight()
+                    .shadow(1.dp, RoundedCornerShape(9.dp))
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(colors.enterKeyBackground)
+                    .clickable(onClick = onDone)
+                    .testTag("panel_inline_keyboard_done"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "সম্পন্ন ✓",
+                    color = colors.enterKeyText,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
 }
 
 private fun formatBengaliSignForDisplay(raw: String): String {

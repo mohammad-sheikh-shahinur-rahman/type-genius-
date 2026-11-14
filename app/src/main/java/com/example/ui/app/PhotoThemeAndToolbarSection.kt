@@ -50,22 +50,24 @@ fun ToolbarCustomizerCard(settingsManager: SettingsManager) {
 
     val toolLabels = mapOf(
         KeyboardToolId.GEMINI_AI to "TypeGenius AI",
-        KeyboardToolId.STICKERS to "স্টিকার ও কাওমোজি (Stickers)",
+        KeyboardToolId.STICKERS to "বাংলা স্টিকার তৈরি ও কাওমোজি",
         KeyboardToolId.TEXT_EDITING to "টেক্সট এডিটর (Text Edit)",
-        KeyboardToolId.EMOJI to "ইমোজি ও জিআইএফ (Emoji)",
-        KeyboardToolId.CLIPBOARD to "ক্লিপবোর্ড হিস্ট্রি (Clipboard)",
+        KeyboardToolId.EMOJI to "ইমোজি (Emoji)",
+        KeyboardToolId.CLIPBOARD to "ক্লিপবোর্ড সার্চ ও হিস্ট্রি",
         KeyboardToolId.TRANSLATOR to "অফলাইন ট্রান্সলেটর (Translate)",
         KeyboardToolId.CALCULATOR to "ক্যালকুলেটর ও কনভার্টার (Calc)",
-        KeyboardToolId.UTILITIES to "নোটপ্যাড, তারিখ ও TTS (Notes)",
+        KeyboardToolId.UTILITIES to "নোটপ্যাড, বাংলা তারিখ ও TTS",
         KeyboardToolId.FANCY_FONTS to "স্টাইলিশ ফন্ট (Fancy Fonts)",
         KeyboardToolId.THEMES to "থিমস (Themes)",
         KeyboardToolId.INCOGNITO to "প্রাইভেট ইনকগনিটো (Incognito)",
         KeyboardToolId.SETTINGS to "কীবোর্ড সেটিংস (Settings)",
-        KeyboardToolId.GIF to "জিআইএফ (GIF)",
+        KeyboardToolId.GIF to "অ্যানিমেটেড জিআইএফ (Real GIF)",
         KeyboardToolId.ONE_HANDED to "এক হাত মোড (One-hand)",
         KeyboardToolId.FLOATING to "ফ্লোটিং কীবোর্ড (Floating)",
-        KeyboardToolId.RESIZE to "সাইজ পরিবর্তন (Resize)",
-        KeyboardToolId.NUMPAD to "নাম্বার প্যাড (Numpad)",
+        KeyboardToolId.RESIZE to "সাইজ ও দ্রুত সেটিংস (Resize)",
+        KeyboardToolId.NUMPAD to "নাম্বার প্যাড (বাংলা/EN Numpad)",
+        KeyboardToolId.DEV_MATH to "কোডিং ও গণিত প্রতীক (Dev & Math)",
+        KeyboardToolId.QUICK_SETTINGS to "উচ্চতা ও সাউন্ড স্লাইডার",
         KeyboardToolId.SHARE to "শেয়ার অ্যাপ (Share)"
     )
 

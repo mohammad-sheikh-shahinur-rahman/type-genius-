@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EventNote
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -287,7 +289,10 @@ fun KeyboardTopBar(
                         KeyboardToolId.FLOATING -> floatingMode
                         KeyboardToolId.RESIZE -> heightPreset != KeyboardHeightPreset.NORMAL
                         KeyboardToolId.NUMPAD -> viewMode == KeyboardViewMode.NUMPAD
-                        KeyboardToolId.SETTINGS, KeyboardToolId.GIF, KeyboardToolId.SHARE -> false
+                        KeyboardToolId.GIF -> viewMode == KeyboardViewMode.GIF
+                        KeyboardToolId.DEV_MATH -> viewMode == KeyboardViewMode.DEV_MATH_SYMBOLS
+                        KeyboardToolId.QUICK_SETTINGS -> viewMode == KeyboardViewMode.QUICK_SETTINGS
+                        KeyboardToolId.SETTINGS, KeyboardToolId.SHARE -> false
                     }
 
                     val activeTint = if (tool == KeyboardToolId.INCOGNITO && isIncognitoMode) {
@@ -347,7 +352,9 @@ fun KeyboardTopBar(
                                     KeyboardToolId.STICKERS -> onSelectViewMode(
                                         if (viewMode == KeyboardViewMode.STICKERS_KAOMOJI) KeyboardViewMode.LETTERS else KeyboardViewMode.STICKERS_KAOMOJI
                                     )
-                                    KeyboardToolId.GIF -> onSelectViewMode(KeyboardViewMode.EMOJI)
+                                    KeyboardToolId.GIF -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.GIF) KeyboardViewMode.LETTERS else KeyboardViewMode.GIF
+                                    )
                                     KeyboardToolId.CLIPBOARD -> onSelectViewMode(
                                         if (viewMode == KeyboardViewMode.CLIPBOARD) KeyboardViewMode.LETTERS else KeyboardViewMode.CLIPBOARD
                                     )
@@ -368,9 +375,17 @@ fun KeyboardTopBar(
                                     KeyboardToolId.INCOGNITO -> onToggleIncognito()
                                     KeyboardToolId.ONE_HANDED -> onCycleOneHanded()
                                     KeyboardToolId.FLOATING -> onToggleFloating()
-                                    KeyboardToolId.RESIZE -> onCycleHeight()
+                                    KeyboardToolId.RESIZE -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.QUICK_SETTINGS) KeyboardViewMode.LETTERS else KeyboardViewMode.QUICK_SETTINGS
+                                    )
                                     KeyboardToolId.NUMPAD -> onSelectViewMode(
                                         if (viewMode == KeyboardViewMode.NUMPAD) KeyboardViewMode.LETTERS else KeyboardViewMode.NUMPAD
+                                    )
+                                    KeyboardToolId.DEV_MATH -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.DEV_MATH_SYMBOLS) KeyboardViewMode.LETTERS else KeyboardViewMode.DEV_MATH_SYMBOLS
+                                    )
+                                    KeyboardToolId.QUICK_SETTINGS -> onSelectViewMode(
+                                        if (viewMode == KeyboardViewMode.QUICK_SETTINGS) KeyboardViewMode.LETTERS else KeyboardViewMode.QUICK_SETTINGS
                                     )
                                     KeyboardToolId.SHARE -> onShareApp()
                                 }
@@ -562,6 +577,17 @@ fun KeyboardTopBar(
                 cappedCandidates.forEachIndexed { index, candidate ->
                     val isRealPrediction = suggestions.isNotEmpty()
                     val isGrammarFix = isRealPrediction && candidate.startsWith("✓ ")
+                    val displayText = if (
+                        isRealPrediction &&
+                        !isGrammarFix &&
+                        activeFancyStyle != FancyFontStyle.NORMAL &&
+                        !activeFancyStyle.isHandwritingFont &&
+                        !activeFancyStyle.isDecoratorFrame
+                    ) {
+                        com.example.data.dictionary.UnicodeTextStyler.styleText(candidate, activeFancyStyle)
+                    } else {
+                        candidate
+                    }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -580,7 +606,7 @@ fun KeyboardTopBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = candidate,
+                            text = displayText,
                             color = when {
                                 isGrammarFix -> colors.accent
                                 index == 0 && isRealPrediction -> colors.accent
@@ -759,6 +785,18 @@ private fun TopBarToolContent(
         )
         KeyboardToolId.NUMPAD -> Icon(
             imageVector = Icons.Default.Dialpad,
+            contentDescription = tool.label,
+            tint = tint,
+            modifier = Modifier.size(19.dp)
+        )
+        KeyboardToolId.DEV_MATH -> Icon(
+            imageVector = Icons.Default.Code,
+            contentDescription = tool.label,
+            tint = tint,
+            modifier = Modifier.size(19.dp)
+        )
+        KeyboardToolId.QUICK_SETTINGS -> Icon(
+            imageVector = Icons.Default.Tune,
             contentDescription = tool.label,
             tint = tint,
             modifier = Modifier.size(19.dp)
