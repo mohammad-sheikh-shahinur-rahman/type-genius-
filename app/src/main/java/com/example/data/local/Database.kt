@@ -197,7 +197,7 @@ abstract class TypeGeniusDatabase : RoomDatabase() {
                     "typegenius_local.db"
                 )
                     .addMigrations(MIGRATION_3_4)
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance

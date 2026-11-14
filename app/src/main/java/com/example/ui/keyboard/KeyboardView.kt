@@ -44,16 +44,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Palette
@@ -161,6 +162,7 @@ fun KeyboardView(
     activeFancyStyle: FancyFontStyle = FancyFontStyle.NORMAL,
     lastTypedWordPreview: String = "",
     canUndoDelete: Boolean = false,
+    isAutoIncognitoActive: Boolean = false,
     onOpenTranslator: () -> Unit = {},
     onCloseTranslator: () -> Unit = {},
     onTranslatorSourceTextChange: (String) -> Unit = {},
@@ -197,7 +199,7 @@ fun KeyboardView(
     onGlideCommitted: (trail: List<Pair<Float, Float>>, keyCenters: Map<String, Pair<Float, Float>>) -> Unit = { _, _ -> },
     onSelectFancyStyle: (FancyFontStyle) -> Unit = {},
     onTransformLastWord: (FancyFontStyle) -> Unit = {},
-    onSendFancyStyleCard: (FancyFontStyle, HandwritingPaperTheme) -> Unit = { _, _ -> },
+    onSendFancyStyleCard: (FancyFontStyle, HandwritingPaperTheme, HandwritingCardFormat, String) -> Unit = { _, _, _, _ -> },
     onOpenHandwritingImport: () -> Unit = {},
     onInsertTextSnippet: (String) -> Unit = {},
     handwritingLiveText: String = "",
@@ -268,11 +270,16 @@ fun KeyboardView(
     val customAiPrompts by settingsManager.customAiPrompts.collectAsState(initial = emptyList())
     val notepadDraft by settingsManager.notepadDraft.collectAsState(initial = "")
     val userTemplates by settingsManager.userTemplates.collectAsState(initial = SettingsManager.DEFAULT_USER_TEMPLATES)
+    val keyPopupEnabled by settingsManager.keyPopupEnabled.collectAsState(initial = true)
+    val spacebarCursorScrubEnabled by settingsManager.spacebarCursorScrubEnabled.collectAsState(initial = true)
+    val avroJuktakkhorBarEnabled by settingsManager.avroJuktakkhorBarEnabled.collectAsState(initial = true)
+    val handwritingSignature by settingsManager.handwritingSignature.collectAsState(initial = "")
     val activeKeyboardFontFamily = remember(keyboardFontId, customFontPath, activeFancyStyle) {
         val effectiveId = activeFancyStyle.handwritingPresetId() ?: keyboardFontId
         CustomFontManager.getFontFamily(context, effectiveId, customFontPath)
     }
     var selectedPaperTheme by remember { mutableStateOf(HandwritingPaperTheme.NOTEBOOK) }
+    var selectedCardFormat by remember { mutableStateOf(HandwritingCardFormat.CHAT_CARD) }
 
     val wallpaperBitmap = remember(wallpaperPath) {
         if (wallpaperPath.isNotBlank()) {
@@ -555,7 +562,9 @@ fun KeyboardView(
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 3.dp)
+                            modifier = Modifier
+                                .padding(top = 3.dp)
+                                .horizontalScroll(rememberScrollState())
                         ) {
                             HandwritingPaperTheme.entries.forEach { paper ->
                                 val isPaperSelected = selectedPaperTheme == paper
@@ -580,6 +589,30 @@ fun KeyboardView(
                                     )
                                 }
                             }
+                            HandwritingCardFormat.entries.forEach { fmt ->
+                                val isFmtSelected = selectedCardFormat == fmt
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(
+                                            if (isFmtSelected) Color(0xFF6A1B9A)
+                                            else Color(selectedPaperTheme.inkColor).copy(alpha = 0.10f)
+                                        )
+                                        .clickable {
+                                            haptic()
+                                            selectedCardFormat = fmt
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .testTag("handwriting_format_${fmt.id}")
+                                ) {
+                                    Text(
+                                        text = fmt.label,
+                                        color = if (isFmtSelected) Color.White else Color(selectedPaperTheme.inkColor),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -589,16 +622,101 @@ fun KeyboardView(
                             .background(colors.accent)
                             .clickable {
                                 haptic()
-                                onSendFancyStyleCard(activeFancyStyle, selectedPaperTheme)
+                                onSendFancyStyleCard(activeFancyStyle, selectedPaperTheme, selectedCardFormat, handwritingSignature)
                             }
                             .padding(horizontal = 10.dp, vertical = 8.dp)
                             .testTag("handwriting_send_image_btn")
                     ) {
                         Text(
-                            text = "✍️ পাঠান",
+                            text = if (selectedCardFormat == HandwritingCardFormat.PORTRAIT_LETTER) "✉️ চিঠি" else "✍️ পাঠান",
                             color = Color.White,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // 0.75 Avro Juktakkhor Quick-Hint Bar when Avro Phonetic is active
+            if (activeLanguage == LanguageId.BANGLA_PHONETIC &&
+                viewMode == KeyboardViewMode.LETTERS &&
+                !isTranslatorOpen &&
+                avroJuktakkhorBarEnabled
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                        .testTag("avro_juktakkhor_hint_bar"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(colors.accent.copy(alpha = 0.16f))
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "যুক্তাক্ষর",
+                                color = colors.accent,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        KeyboardLayouts.avroJuktakkhorHints.forEach { hint ->
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.keySpecialBackground)
+                                    .clickable {
+                                        haptic()
+                                        onInsertTextSnippet(hint.glyph)
+                                    }
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                                    .testTag("avro_hint_${hint.avroCode}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = hint.glyph,
+                                    color = colors.textPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = hint.avroCode,
+                                    color = colors.textSecondary,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(colors.keySpecialBackground)
+                            .clickable {
+                                haptic()
+                                coroutineScope.launch { settingsManager.setAvroJuktakkhorBarEnabled(false) }
+                            }
+                            .testTag("avro_hint_close_btn"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "যুক্তাক্ষর বার লুকান",
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -616,6 +734,7 @@ fun KeyboardView(
                 isTranslatorOpen = isTranslatorOpen,
                 isTranslatorVoiceActive = isTranslatorVoiceActive,
                 isIncognitoMode = isIncognitoMode,
+                isAutoIncognitoMode = isAutoIncognitoActive,
                 oneHandedMode = oneHandedMode,
                 floatingMode = floatingMode,
                 heightPreset = heightPreset,
@@ -1157,7 +1276,9 @@ fun KeyboardView(
                         isBengaliActive = isBengaliLang,
                         onSelectLiveStyle = onSelectFancyStyle,
                         onTransformLastWord = onTransformLastWord,
-                        onSendStyleCard = { style -> onSendFancyStyleCard(style, selectedPaperTheme) },
+                        onSendStyleCard = { style ->
+                            onSendFancyStyleCard(style, selectedPaperTheme, selectedCardFormat, handwritingSignature)
+                        },
                         onOpenHandwritingImport = onOpenHandwritingImport,
                         onInsertSnippet = onInsertTextSnippet,
                         onClose = { onSelectViewMode(KeyboardViewMode.LETTERS) },
@@ -1340,6 +1461,7 @@ fun KeyboardView(
                                     keyAction = key,
                                     colors = colors,
                                     hideSecondaryHint = hideLongPressHints,
+                                    showTapMagnifier = keyPopupEnabled,
                                     alignPopupEnd = idx >= nums.size / 2,
                                     modifier = Modifier.weight(key.weight),
                                     onClick = {
@@ -1359,6 +1481,7 @@ fun KeyboardView(
                                         keyAction = key,
                                         colors = colors,
                                         hideSecondaryHint = hideLongPressHints,
+                                        showTapMagnifier = keyPopupEnabled,
                                         alignPopupEnd = true,
                                         modifier = Modifier.weight(key.weight),
                                         onClick = {
@@ -1453,6 +1576,7 @@ fun KeyboardView(
                                             colors = colors,
                                             isHighlight = isShiftActive,
                                             hideSecondaryHint = hideLongPressHints,
+                                            showTapMagnifier = keyPopupEnabled,
                                             alignPopupEnd = keyIdx >= rowKeys.size / 2,
                                             isCompactRow = isDenseRow,
                                             activeFontStyle = if (viewMode == KeyboardViewMode.LETTERS) activeFancyStyle else FancyFontStyle.NORMAL,
@@ -1643,6 +1767,8 @@ fun KeyboardView(
                             onLongPressLanguagePicker = {
                                 showLanguageDialog = true
                             },
+                            isCursorScrubEnabled = spacebarCursorScrubEnabled,
+                            onCursorScrubStep = { step -> onMoveCursor(step, 0, false) },
                             modifier = Modifier.weight(if (isSplitMode) 1.6f else 3.2f)
                         )
 
@@ -1667,6 +1793,8 @@ fun KeyboardView(
                                 onLongPressLanguagePicker = {
                                     showLanguageDialog = true
                                 },
+                                isCursorScrubEnabled = spacebarCursorScrubEnabled,
+                                onCursorScrubStep = { step -> onMoveCursor(step, 0, false) },
                                 modifier = Modifier.weight(1.6f)
                             )
                         }
@@ -1981,7 +2109,7 @@ private fun toolIconForGhost(tool: KeyboardToolId) = when (tool) {
     KeyboardToolId.CLIPBOARD -> Icons.Default.ContentPaste
     KeyboardToolId.TRANSLATOR -> Icons.Default.Translate
     KeyboardToolId.CALCULATOR -> Icons.Default.Calculate
-    KeyboardToolId.UTILITIES -> Icons.Default.EventNote
+    KeyboardToolId.UTILITIES -> Icons.AutoMirrored.Filled.EventNote
     KeyboardToolId.FANCY_FONTS -> Icons.Default.TextFormat
     KeyboardToolId.THEMES -> Icons.Default.Palette
     KeyboardToolId.INCOGNITO -> Icons.Default.VisibilityOff
@@ -2112,6 +2240,7 @@ fun KeyView(
     isHighlight: Boolean = false,
     isEnterKey: Boolean = false,
     hideSecondaryHint: Boolean = false,
+    showTapMagnifier: Boolean = true,
     alignPopupEnd: Boolean = false,
     isCompactRow: Boolean = false,
     activeFontStyle: FancyFontStyle = FancyFontStyle.NORMAL,
@@ -2173,11 +2302,17 @@ fun KeyView(
         keyAction.secondaryLabel?.let { formatBengaliSignForDisplay(it) }
     }
     val hasSecondary = displaySecondary != null && !hideSecondaryHint
+    val showTapBubble = isPressed && !showPreviewPopup && showTapMagnifier &&
+        keyAction.type == KeyType.CHARACTER && displayPrimary.length <= 3
+
+    LaunchedEffect(showPreviewPopup, showTapBubble) {
+        onPopupStateChange?.invoke(showPreviewPopup || showTapBubble)
+    }
 
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .zIndex(if (showPreviewPopup) 100f else 0f)
+            .zIndex(if (showPreviewPopup) 100f else if (showTapBubble) 80f else 0f)
             .testTag("key_${keyAction.label}")
             .semantics {
                 contentDescription = if (keyAction.secondaryLabel != null) {
@@ -2322,6 +2457,29 @@ fun KeyView(
                     .align(Alignment.Center)
                     .padding(top = if (hasSecondary) 5.dp else 0.dp)
             )
+        }
+
+        if (showTapBubble) {
+            Box(
+                modifier = Modifier
+                    .offset(y = (-48).dp)
+                    .zIndex(150f)
+                    .widthIn(min = 44.dp)
+                    .height(46.dp)
+                    .shadow(8.dp, RoundedCornerShape(10.dp))
+                    .background(colors.keySpecialBackground, RoundedCornerShape(10.dp))
+                    .border(1.2.dp, colors.accent.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = displayPrimary,
+                    color = colors.textPrimary,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
         }
 
         if (showPreviewPopup && variants.isNotEmpty()) {

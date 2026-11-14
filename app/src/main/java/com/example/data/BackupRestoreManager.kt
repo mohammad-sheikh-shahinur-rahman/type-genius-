@@ -141,6 +141,10 @@ object BackupRestoreManager {
             put("otpAutoExpireMinutes", settings.otpAutoExpireMinutes.first())
             put("perAppSmartLanguageEnabled", settings.perAppSmartLanguageEnabled.first())
             put("perAppLanguageMapJson", settings.perAppLanguageMapJson.first())
+            put("keyPopupEnabled", settings.keyPopupEnabled.first())
+            put("spacebarCursorScrubEnabled", settings.spacebarCursorScrubEnabled.first())
+            put("avroJuktakkhorBarEnabled", settings.avroJuktakkhorBarEnabled.first())
+            put("handwritingSignature", settings.handwritingSignature.first())
             put("toolbarTools", JSONArray(toolbarTools.map { it.id }))
         }
         root.put("preferences", prefsObj)
@@ -361,6 +365,22 @@ object BackupRestoreManager {
             }
             if (prefs.has("perAppLanguageMapJson")) {
                 settings.setPerAppLanguageMapJson(prefs.optString("perAppLanguageMapJson", ""))
+                settingsCount++
+            }
+            if (prefs.has("keyPopupEnabled")) {
+                settings.setKeyPopupEnabled(prefs.optBoolean("keyPopupEnabled", true))
+                settingsCount++
+            }
+            if (prefs.has("spacebarCursorScrubEnabled")) {
+                settings.setSpacebarCursorScrubEnabled(prefs.optBoolean("spacebarCursorScrubEnabled", true))
+                settingsCount++
+            }
+            if (prefs.has("avroJuktakkhorBarEnabled")) {
+                settings.setAvroJuktakkhorBarEnabled(prefs.optBoolean("avroJuktakkhorBarEnabled", true))
+                settingsCount++
+            }
+            if (prefs.has("handwritingSignature")) {
+                settings.setHandwritingSignature(prefs.optString("handwritingSignature", ""))
                 settingsCount++
             }
             prefs.optJSONArray("toolbarTools")?.let { arr ->

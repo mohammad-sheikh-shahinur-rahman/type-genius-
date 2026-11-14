@@ -35,6 +35,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.MainActivity
+import com.example.data.CrashDiagnosticLogger
 import com.example.data.CustomFontManager
 import com.example.data.SettingsManager
 import com.example.data.TypingStatsManager
@@ -60,6 +61,7 @@ import com.example.model.KeyboardViewMode
 import com.example.model.LanguageId
 import com.example.model.PanelTextInputTarget
 import com.example.model.SoundProfile
+import com.example.ui.keyboard.HandwritingCardFormat
 import com.example.ui.keyboard.HandwritingOutputGenerator
 import com.example.ui.keyboard.HandwritingPaperTheme
 import com.example.ui.keyboard.KeyboardView
@@ -148,6 +150,10 @@ class TypeGeniusIME : InputMethodService(),
     private var perAppLanguageMap: Map<String, String> = emptyMap()
     private var currentAppPackage: String? = null
     private var isSensitiveLockedField = false
+    private var isAutoFieldIncognito by mutableStateOf(false)
+    private var handwritingSignatureCache by mutableStateOf("")
+
+    private fun isPrivacyPaused(): Boolean = isIncognitoEnabled || isAutoFieldIncognito
 
     private var panelInputTarget by mutableStateOf(PanelTextInputTarget.NONE)
     private var clipboardSearchQuery by mutableStateOf("")
@@ -160,6 +166,7 @@ class TypeGeniusIME : InputMethodService(),
 
     override fun onCreate() {
         super.onCreate()
+        CrashDiagnosticLogger.installUncaughtHandler(this)
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
@@ -184,6 +191,7 @@ class TypeGeniusIME : InputMethodService(),
             launch { settingsManager.activeFancyFontStyle.collect { activeFancyStyle = it } }
             launch { settingsManager.customFontPath.collect { customFontPathCache = it } }
             launch { settingsManager.customFontName.collect { customFontNameCache = it } }
+            launch { settingsManager.handwritingSignature.collect { handwritingSignatureCache = it } }
             launch { settingsManager.otpAutoExpireMinutes.collect { otpAutoExpireMinutes = it } }
             launch { settingsManager.perAppSmartLanguageEnabled.collect { perAppSmartLanguageEnabled = it } }
             launch { settingsManager.perAppLanguageMap.collect { perAppLanguageMap = it } }
@@ -227,7 +235,7 @@ class TypeGeniusIME : InputMethodService(),
         try {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
-                if (isIncognitoEnabled) return@OnPrimaryClipChangedListener
+                if (isPrivacyPaused()) return@OnPrimaryClipChangedListener
                 val clip = cm?.primaryClip
                 if (clip != null && clip.itemCount > 0) {
                     val text = clip.getItemAt(0).text?.toString()
@@ -306,6 +314,7 @@ class TypeGeniusIME : InputMethodService(),
                     activeFancyStyle = activeFancyStyle,
                     lastTypedWordPreview = lastTypedWordPreview,
                     canUndoDelete = lastDeletedUndoText.isNotEmpty(),
+                    isAutoIncognitoActive = isAutoFieldIncognito,
                     onOpenTranslator = { openTranslator() },
                     onCloseTranslator = { closeTranslator() },
                     onTranslatorSourceTextChange = { translatorSourceText = it },
@@ -422,7 +431,9 @@ class TypeGeniusIME : InputMethodService(),
                         viewMode = KeyboardViewMode.LETTERS
                     },
                     onTransformLastWord = { style -> transformLastWordWithStyle(style) },
-                    onSendFancyStyleCard = { style, paperTheme -> sendFancyStyleCard(style, paperTheme) },
+                    onSendFancyStyleCard = { style, paperTheme, format, signature ->
+                        sendFancyStyleCard(style, paperTheme, format, signature)
+                    },
                     onOpenHandwritingImport = { openCompanionSettings() },
                     onInsertTextSnippet = { snippet ->
                         if (isTranslatorOpen) translatorSourceText += snippet
@@ -506,6 +517,8 @@ class TypeGeniusIME : InputMethodService(),
                 variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
                 variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
             )
+        val noPersonalizedLearning = ((info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        isAutoFieldIncognito = noPersonalizedLearning || isSensitiveLockedField
 
         updateAutoCapitalizeState()
 
@@ -524,6 +537,7 @@ class TypeGeniusIME : InputMethodService(),
             activeFancyStyle = settingsManager.activeFancyFontStyle.first()
             customFontPathCache = settingsManager.customFontPath.first()
             customFontNameCache = settingsManager.customFontName.first()
+            handwritingSignatureCache = settingsManager.handwritingSignature.first()
             otpAutoExpireMinutes = settingsManager.otpAutoExpireMinutes.first()
             perAppSmartLanguageEnabled = settingsManager.perAppSmartLanguageEnabled.first()
             perAppLanguageMap = settingsManager.perAppLanguageMap.first()
@@ -603,10 +617,10 @@ class TypeGeniusIME : InputMethodService(),
         lastWordCommitTimeMs = now
 
         val prev = textBeforeWord.trimEnd().takeLastWhile { !it.isWhitespace() }
-        if (prev.isNotBlank()) {
+        if (!isPrivacyPaused() && prev.isNotBlank()) {
             BigramPredictionEngine.learnPair(prev, clean)
         }
-        if (!isIncognitoEnabled) {
+        if (!isPrivacyPaused()) {
             serviceScope.launch {
                 statsManager.recordCommittedWord(clean, activeLanguage, elapsed)
             }
@@ -700,7 +714,7 @@ class TypeGeniusIME : InputMethodService(),
                     ic.commitText(toCommit, 1)
                     lastTypedWordPreview = topCandidate
                     recordCommittedWordMetrics(topCandidate, contextBeforeSpace)
-                    if (!isIncognitoEnabled) {
+                    if (!isPrivacyPaused()) {
                         serviceScope.launch {
                             dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
                         }
@@ -1227,7 +1241,7 @@ class TypeGeniusIME : InputMethodService(),
                     UnicodeTextStyler.styleText(top, activeFancyStyle)
                 } else top
                 translatorSourceText += styledTop
-                if (!isIncognitoEnabled) {
+                if (!isPrivacyPaused()) {
                     serviceScope.launch {
                         dictionaryManager.recordWordUsed(top, activeLanguage)
                     }
@@ -1249,7 +1263,7 @@ class TypeGeniusIME : InputMethodService(),
             lastTypedWordPreview = topCandidate
             val priorText = ic.getTextBeforeCursor(40, 0)?.toString() ?: ""
             recordCommittedWordMetrics(topCandidate, priorText.dropLast(toCommit.length.coerceAtMost(priorText.length)))
-            if (!isIncognitoEnabled) {
+            if (!isPrivacyPaused()) {
                 serviceScope.launch {
                     dictionaryManager.recordWordUsed(topCandidate, activeLanguage)
                 }
@@ -1311,7 +1325,7 @@ class TypeGeniusIME : InputMethodService(),
             translatorComposingPreview = ""
             lastGlideCommittedWord = ""
             isTypingActive = false
-            if (!isIncognitoEnabled) {
+            if (!isPrivacyPaused()) {
                 serviceScope.launch {
                     dictionaryManager.recordWordUsed(commitValue, activeLanguage)
                 }
@@ -1356,7 +1370,7 @@ class TypeGeniusIME : InputMethodService(),
         isTypingActive = false
         val contextForBigram = ic.getTextBeforeCursor(48, 0)?.toString() ?: ""
         recordCommittedWordMetrics(commitValue, contextForBigram.dropLast((styledCandidate.length + 1).coerceAtMost(contextForBigram.length)))
-        if (!isIncognitoEnabled) {
+        if (!isPrivacyPaused()) {
             serviceScope.launch {
                 dictionaryManager.recordWordUsed(commitValue, activeLanguage)
             }
@@ -1474,7 +1488,7 @@ class TypeGeniusIME : InputMethodService(),
                 refreshHandwritingLiveText()
             }
 
-            if (!isIncognitoEnabled) {
+            if (!isPrivacyPaused()) {
                 dictionaryManager.recordWordUsed(rawTop, activeLanguage)
             }
         }
@@ -1890,7 +1904,12 @@ class TypeGeniusIME : InputMethodService(),
         handwritingLiveText = activeLine.ifBlank { clean }.takeLast(160)
     }
 
-    private fun sendFancyStyleCard(style: FancyFontStyle, paperTheme: HandwritingPaperTheme) {
+    private fun sendFancyStyleCard(
+        style: FancyFontStyle,
+        paperTheme: HandwritingPaperTheme,
+        format: HandwritingCardFormat = HandwritingCardFormat.CHAT_CARD,
+        signature: String = handwritingSignatureCache
+    ) {
         if (style == FancyFontStyle.HANDWRITING_CUSTOM && !CustomFontManager.hasCustomFont(customFontPathCache)) {
             Toast.makeText(
                 this,
@@ -1904,8 +1923,17 @@ class TypeGeniusIME : InputMethodService(),
         if (composingBuffer.isNotEmpty() && !isTranslatorOpen) {
             commitComposing()
         }
-        val draft = handwritingLiveText.trim().ifBlank {
-            readFieldTextForAi().trim().take(240)
+        val draft = if (format == HandwritingCardFormat.PORTRAIT_LETTER) {
+            val longSource = if (isTranslatorOpen) {
+                translatorSourceText.trim()
+            } else {
+                ic?.getTextBeforeCursor(650, 0)?.toString()?.trim().orEmpty()
+            }
+            longSource.ifBlank { handwritingLiveText.trim() }.take(600)
+        } else {
+            handwritingLiveText.trim().ifBlank {
+                readFieldTextForAi().trim().take(240)
+            }
         }
         if (draft.isBlank()) {
             Toast.makeText(this, "হাতের লেখায় পাঠাতে আগে কিছু লিখুন", Toast.LENGTH_SHORT).show()
@@ -1918,7 +1946,9 @@ class TypeGeniusIME : InputMethodService(),
                 style = style,
                 customFontPath = customFontPathCache,
                 customFontName = customFontNameCache,
-                paperTheme = paperTheme
+                paperTheme = paperTheme,
+                format = format,
+                signature = signature
             )
             sendMediaFile(
                 file = file,
@@ -1927,7 +1957,8 @@ class TypeGeniusIME : InputMethodService(),
                 fallbackText = draft,
                 draftTextToClearOnDirectCommit = if (!isTranslatorOpen && ic != null) draft else ""
             )
-        } catch (_: Exception) {
+        } catch (t: Throwable) {
+            CrashDiagnosticLogger.logError(this, "TypeGeniusIME.sendFancyStyleCard", "Failed to generate handwriting card", t)
             Toast.makeText(this, "হাতের লেখা কার্ড তৈরি করা যায়নি", Toast.LENGTH_SHORT).show()
         }
     }

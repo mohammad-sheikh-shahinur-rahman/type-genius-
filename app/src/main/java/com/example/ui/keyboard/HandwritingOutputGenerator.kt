@@ -57,6 +57,11 @@ enum class HandwritingPaperTheme(
     )
 }
 
+enum class HandwritingCardFormat(val id: String, val label: String) {
+    CHAT_CARD("chat", "চ্যাট কার্ড"),
+    PORTRAIT_LETTER("letter", "চিঠি / কবিতা")
+}
+
 object HandwritingOutputGenerator {
 
     fun renderHandwritingBitmap(
@@ -66,20 +71,33 @@ object HandwritingOutputGenerator {
         customFontPath: String,
         customFontName: String = "",
         paperTheme: HandwritingPaperTheme = HandwritingPaperTheme.NOTEBOOK,
-        widthPx: Int = 1080
+        widthPx: Int = 1080,
+        format: HandwritingCardFormat = HandwritingCardFormat.CHAT_CARD,
+        signature: String = ""
     ): Bitmap {
+        val isLetter = format == HandwritingCardFormat.PORTRAIT_LETTER
+        val maxChars = if (isLetter) 600 else 240
+        val defaultText = if (isLetter) "প্রিয় বন্ধু,\nআমার হাতের লেখায় একটি ছোট্ট চিঠি রইলো..." else "আমার হাতের লেখা"
         val displayText = if (style.isHandwritingFont) {
-            rawText.trim().ifBlank { "আমার হাতের লেখা" }
+            rawText.trim().ifBlank { defaultText }
         } else {
             UnicodeTextStyler.styleText(rawText.trim().ifBlank { "TypeGenius বাংলা" }, style)
-        }.take(240)
+        }.take(maxChars)
 
         val typeface = CustomFontManager.getTypefaceForFancyStyle(context, style, customFontPath)
-        val textSizePx = when {
-            displayText.length <= 24 -> 72f
-            displayText.length <= 60 -> 58f
-            displayText.length <= 120 -> 48f
-            else -> 40f
+        val textSizePx = if (isLetter) {
+            when {
+                displayText.length <= 140 -> 50f
+                displayText.length <= 320 -> 42f
+                else -> 36f
+            }
+        } else {
+            when {
+                displayText.length <= 24 -> 72f
+                displayText.length <= 60 -> 58f
+                displayText.length <= 120 -> 48f
+                else -> 40f
+            }
         }
 
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -88,24 +106,27 @@ object HandwritingOutputGenerator {
             this.typeface = typeface
         }
 
-        val horizontalPadding = 88
+        val horizontalPadding = if (isLetter) 104 else 88
         val contentWidth = (widthPx - horizontalPadding * 2).coerceAtLeast(300)
         val staticLayout = StaticLayout.Builder
             .obtain(displayText, 0, displayText.length, textPaint, contentWidth)
             .setAlignment(
-                if (displayText.length <= 36 && !displayText.contains('\n')) {
+                if (!isLetter && displayText.length <= 36 && !displayText.contains('\n')) {
                     Layout.Alignment.ALIGN_CENTER
                 } else {
                     Layout.Alignment.ALIGN_NORMAL
                 }
             )
-            .setLineSpacing(14f, 1.18f)
-            .setMaxLines(10)
+            .setLineSpacing(if (isLetter) 18f else 14f, if (isLetter) 1.24f else 1.18f)
+            .setMaxLines(if (isLetter) 26 else 10)
             .build()
 
-        val verticalPadding = 92
-        val footerHeight = 52
-        val heightPx = (staticLayout.height + verticalPadding * 2 + footerHeight).coerceIn(360, 1280)
+        val headerHeight = if (isLetter) 96 else 0
+        val verticalPadding = if (isLetter) 96 else 92
+        val footerHeight = if (isLetter) 84 else 52
+        val minH = if (isLetter) 1240 else 360
+        val maxH = if (isLetter) 1780 else 1280
+        val heightPx = (headerHeight + staticLayout.height + verticalPadding * 2 + footerHeight).coerceIn(minH, maxH)
 
         val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -120,7 +141,6 @@ object HandwritingOutputGenerator {
         }
         canvas.drawRoundRect(cardRect, corner, corner, bgPaint)
 
-        // Subtle border
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.style = Paint.Style.STROKE
             strokeWidth = 3f
@@ -133,29 +153,78 @@ object HandwritingOutputGenerator {
         canvas.drawRoundRect(cardRect, corner, corner, borderPaint)
 
         // Optional ruled notebook lines for authentic handwritten paper look
-        if (paperTheme.hasRuledLines) {
+        if (paperTheme.hasRuledLines || isLetter) {
+            val lineAlpha = if (paperTheme.hasRuledLines) 0x33 else 0x1E
             val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 strokeWidth = 2f
-                color = 0x3364B5F6
+                color = (lineAlpha shl 24) or (0x64B5F6)
             }
-            var y = 110f
-            while (y < heightPx - 70f) {
+            var y = if (isLetter) 148f else 110f
+            val stepY = if (isLetter) 70f else 68f
+            while (y < heightPx - (if (isLetter) 96f else 70f)) {
                 canvas.drawLine(36f, y, widthPx - 36f, y, linePaint)
-                y += 68f
+                y += stepY
             }
-            val marginPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                strokeWidth = 2.5f
-                color = 0x44EF5350
+            if (paperTheme.hasRuledLines) {
+                val marginPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    strokeWidth = 2.5f
+                    color = 0x44EF5350
+                }
+                canvas.drawLine(72f, 28f, 72f, heightPx - 28f, marginPaint)
             }
-            canvas.drawLine(72f, 28f, 72f, heightPx - 28f, marginPaint)
+        }
+
+        if (isLetter) {
+            val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = 26f
+                textAlign = Paint.Align.LEFT
+                this.typeface = typeface
+                color = Color.argb(
+                    165,
+                    Color.red(paperTheme.inkColor),
+                    Color.green(paperTheme.inkColor),
+                    Color.blue(paperTheme.inkColor)
+                )
+            }
+            canvas.drawText("✉️ চিঠি / পোস্টকার্ড", horizontalPadding.toFloat(), 92f, headerPaint)
+            val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                strokeWidth = 2f
+                color = Color.argb(
+                    55,
+                    Color.red(paperTheme.inkColor),
+                    Color.green(paperTheme.inkColor),
+                    Color.blue(paperTheme.inkColor)
+                )
+            }
+            canvas.drawLine(horizontalPadding.toFloat(), 112f, widthPx - horizontalPadding.toFloat(), 112f, dividerPaint)
         }
 
         // Draw handwritten / styled body text
         canvas.save()
-        val textTop = ((heightPx - footerHeight) - staticLayout.height) / 2f
+        val textTop = if (isLetter) {
+            152f
+        } else {
+            ((heightPx - footerHeight) - staticLayout.height) / 2f
+        }
         canvas.translate(horizontalPadding.toFloat(), textTop.coerceAtLeast(56f))
         staticLayout.draw(canvas)
         canvas.restore()
+
+        val cleanSignature = signature.trim()
+        if (cleanSignature.isNotEmpty()) {
+            val sigPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = if (isLetter) 32f else 26f
+                textAlign = Paint.Align.LEFT
+                this.typeface = typeface
+                color = Color.argb(
+                    205,
+                    Color.red(paperTheme.inkColor),
+                    Color.green(paperTheme.inkColor),
+                    Color.blue(paperTheme.inkColor)
+                )
+            }
+            canvas.drawText("— $cleanSignature", horizontalPadding.toFloat(), heightPx - 40f, sigPaint)
+        }
 
         // Clean font attribution pill at bottom right
         val fontLabel = when (style) {
@@ -186,7 +255,9 @@ object HandwritingOutputGenerator {
         style: FancyFontStyle,
         customFontPath: String,
         customFontName: String = "",
-        paperTheme: HandwritingPaperTheme = HandwritingPaperTheme.NOTEBOOK
+        paperTheme: HandwritingPaperTheme = HandwritingPaperTheme.NOTEBOOK,
+        format: HandwritingCardFormat = HandwritingCardFormat.CHAT_CARD,
+        signature: String = ""
     ): File {
         val dir = File(context.cacheDir, "stickers").apply { if (!exists()) mkdirs() }
         val file = File(dir, "tg_hw_${System.currentTimeMillis()}.png")
@@ -196,7 +267,9 @@ object HandwritingOutputGenerator {
             style = style,
             customFontPath = customFontPath,
             customFontName = customFontName,
-            paperTheme = paperTheme
+            paperTheme = paperTheme,
+            format = format,
+            signature = signature
         )
         FileOutputStream(file).use { fos ->
             bmp.compress(Bitmap.CompressFormat.PNG, 100, fos)

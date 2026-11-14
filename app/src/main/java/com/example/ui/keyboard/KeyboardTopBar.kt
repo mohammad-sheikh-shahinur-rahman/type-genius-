@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
@@ -36,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AspectRatio
@@ -45,7 +47,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Mood
@@ -57,6 +58,8 @@ import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -108,6 +111,7 @@ fun KeyboardTopBar(
     isTranslatorOpen: Boolean = false,
     isTranslatorVoiceActive: Boolean = false,
     isIncognitoMode: Boolean = false,
+    isAutoIncognitoMode: Boolean = false,
     oneHandedMode: OneHandedMode = OneHandedMode.FULL,
     floatingMode: Boolean = false,
     heightPreset: KeyboardHeightPreset = KeyboardHeightPreset.NORMAL,
@@ -403,21 +407,26 @@ fun KeyboardTopBar(
                 }
             }
 
-            // Always accessible Suggestions toggle ("T") button
-            ToolboxIconItem(
-                active = false,
-                accent = colors.accent,
-                modifier = Modifier.testTag("toolbox_toggle_button"),
-                onClick = {
-                    onHaptic()
-                    onToggleToolbox()
-                }
+            // Always accessible Suggestions toggle pill button
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 2.dp)
+                    .size(width = 34.dp, height = 30.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.accent.copy(alpha = 0.14f))
+                    .border(1.dp, colors.accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                    .clickable {
+                        onHaptic()
+                        onToggleToolbox()
+                    }
+                    .testTag("toolbox_toggle_button"),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "T",
-                    color = colors.accent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowUp,
+                    contentDescription = "সাজেশন বারে ফিরুন",
+                    tint = colors.accent,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         } else {
@@ -436,8 +445,11 @@ fun KeyboardTopBar(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
+                        .padding(end = 4.dp)
+                        .size(width = 34.dp, height = 28.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(colors.accent.copy(alpha = 0.15f))
+                        .border(1.dp, colors.accent.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
                         .clickable {
                             onHaptic()
                             onToggleToolbox()
@@ -445,7 +457,12 @@ fun KeyboardTopBar(
                         .testTag("toolbox_toggle_button"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("T", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = Icons.Rounded.Widgets,
+                        contentDescription = "কীবোর্ড টুলবার খুলুন",
+                        tint = colors.accent,
+                        modifier = Modifier.size(17.dp)
+                    )
                 }
 
                 if (activeFancyStyle != FancyFontStyle.NORMAL) {
@@ -483,25 +500,34 @@ fun KeyboardTopBar(
                     Spacer(modifier = Modifier.width(4.dp))
                 }
 
-                if (isIncognitoMode) {
-                    Box(
+                if (isIncognitoMode || isAutoIncognitoMode) {
+                    Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF7B1FA2).copy(alpha = 0.25f))
-                            .clickable {
+                            .clickable(enabled = isIncognitoMode) {
                                 onHaptic()
                                 onToggleIncognito()
                             }
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                             .testTag("incognito_status_pill"),
-                        contentAlignment = Alignment.Center
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.VisibilityOff,
-                            contentDescription = "Incognito Active",
+                            contentDescription = if (isAutoIncognitoMode && !isIncognitoMode) "Auto Incognito Active" else "Incognito Active",
                             tint = Color(0xFFE040FB),
                             modifier = Modifier.size(14.dp)
                         )
+                        if (isAutoIncognitoMode && !isIncognitoMode) {
+                            Text(
+                                text = "গোপন",
+                                color = Color(0xFFE040FB),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.width(3.dp))
                 }
@@ -735,7 +761,7 @@ private fun TopBarToolContent(
             modifier = Modifier.size(19.dp)
         )
         KeyboardToolId.UTILITIES -> Icon(
-            imageVector = Icons.Default.EventNote,
+            imageVector = Icons.AutoMirrored.Filled.EventNote,
             contentDescription = tool.label,
             tint = tint,
             modifier = Modifier.size(19.dp)

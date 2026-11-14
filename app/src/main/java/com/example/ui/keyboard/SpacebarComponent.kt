@@ -90,7 +90,9 @@ fun SpacebarComponent(
     onSwipeNextLanguage: () -> Unit,
     onSwipePrevLanguage: () -> Unit,
     onLongPressLanguagePicker: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCursorScrubEnabled: Boolean = true,
+    onCursorScrubStep: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -99,8 +101,10 @@ fun SpacebarComponent(
 
     val canSwipe = isSwipeEnabled && enabledLanguages.size > 1
     val thresholdPx = with(density) { swipeSensitivity.thresholdDp.dp.toPx() }
+    val scrubStepPx = with(density) { 14.dp.toPx() }
     val touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-    val longPressTimeoutMs = ViewConfiguration.getLongPressTimeout().toLong()
+    val longPressTimeoutMs = ViewConfiguration.getLongPressTimeout().toLong().coerceAtLeast(420L)
+    val scrubArmDelayMs = 220L
 
     val currentIndex = enabledLanguages.indexOf(activeLanguage).coerceAtLeast(0)
     val prevLanguage = if (enabledLanguages.size > 1) {
@@ -114,6 +118,7 @@ fun SpacebarComponent(
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var lastSwipeDirection by remember { mutableIntStateOf(1) }
     var swipeFlashActive by remember { mutableStateOf(false) }
+    var isScrubbingCursor by remember { mutableStateOf(false) }
 
     fun triggerHaptic() {
         if (isHapticEnabled) {
@@ -121,13 +126,13 @@ fun SpacebarComponent(
         }
     }
 
-    val isDraggingHorizontally = canSwipe && isPressed && abs(dragOffsetX) > touchSlopPx * 0.65f
-    val dragProgress = if (canSwipe && isPressed) {
+    val isDraggingHorizontally = canSwipe && isPressed && !isScrubbingCursor && abs(dragOffsetX) > touchSlopPx * 0.65f
+    val dragProgress = if (canSwipe && isPressed && !isScrubbingCursor) {
         (abs(dragOffsetX) / thresholdPx).coerceIn(0f, 1f)
     } else 0f
 
     // Rubber-band curve so dragging feels organic and never stiff
-    val rawDampedOffset = if (isPressed && canSwipe) {
+    val rawDampedOffset = if (isPressed && canSwipe && !isScrubbingCursor) {
         val maxVisual = thresholdPx * 0.65f
         val norm = (abs(dragOffsetX) / thresholdPx).coerceIn(0f, 1.4f)
         val curved = (norm / (1f + 0.35f * norm)) * maxVisual
@@ -158,6 +163,7 @@ fun SpacebarComponent(
 
     val currentBgColor by animateColorAsState(
         targetValue = when {
+            isScrubbingCursor -> accentColor.copy(alpha = 0.24f)
             swipeFlashActive -> accentColor.copy(alpha = 0.22f)
             isDraggingHorizontally -> accentColor.copy(alpha = 0.08f + 0.12f * dragProgress)
             isPressed -> backgroundColor.copy(alpha = 0.84f)
@@ -181,21 +187,33 @@ fun SpacebarComponent(
             .semantics {
                 contentDescription = "Spacebar, current language ${activeLanguage.displayName}"
             }
-            .pointerInput(canSwipe, thresholdPx, enabledLanguages, isLongPressEnabled) {
+            .pointerInput(canSwipe, thresholdPx, enabledLanguages, isLongPressEnabled, isCursorScrubEnabled) {
                 awaitEachGesture {
                     val down: PointerInputChange = awaitFirstDown(requireUnconsumed = false)
                     isPressed = true
                     dragOffsetX = 0f
                     swipeFlashActive = false
+                    isScrubbingCursor = false
+                    val downTimeMs = System.currentTimeMillis()
                     var anchorX = down.position.x
                     var hasSwipedAny = false
                     var isLongPressed = false
+                    var isScrubArmed = false
+
+                    val armScrubJob: Job? = if (isCursorScrubEnabled) {
+                        coroutineScope.launch {
+                            delay(scrubArmDelayMs)
+                            if (!hasSwipedAny && isPressed && abs(dragOffsetX) < touchSlopPx) {
+                                isScrubArmed = true
+                            }
+                        }
+                    } else null
 
                     var longPressJob: Job? = null
                     if (isLongPressEnabled) {
                         longPressJob = coroutineScope.launch {
                             delay(longPressTimeoutMs)
-                            if (!hasSwipedAny && isPressed && abs(dragOffsetX) < touchSlopPx) {
+                            if (!hasSwipedAny && !isScrubbingCursor && isPressed && abs(dragOffsetX) < touchSlopPx) {
                                 isLongPressed = true
                                 triggerHaptic()
                                 onLongPressLanguagePicker()
@@ -211,8 +229,9 @@ fun SpacebarComponent(
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
                         if (!change.pressed) {
+                            armScrubJob?.cancel()
                             longPressJob?.cancel()
-                            if (!hasSwipedAny && !isLongPressed) {
+                            if (!hasSwipedAny && !isLongPressed && !isScrubbingCursor) {
                                 if (maxMovedX < touchSlopPx && maxMovedY < touchSlopPx) {
                                     triggerHaptic()
                                     onTapSpace()
@@ -232,12 +251,35 @@ fun SpacebarComponent(
 
                         if (maxMovedX > touchSlopPx * 0.8f) {
                             longPressJob?.cancel()
+                            if (isCursorScrubEnabled && !hasSwipedAny && !isLongPressed && !isScrubbingCursor) {
+                                val elapsed = System.currentTimeMillis() - downTimeMs
+                                if (isScrubArmed || elapsed >= scrubArmDelayMs) {
+                                    isScrubbingCursor = true
+                                    anchorX = change.position.x
+                                    triggerHaptic()
+                                }
+                            }
                         }
 
-                        if (canSwipe && !isLongPressed) {
+                        if (isScrubbingCursor) {
+                            val scrubDelta = change.position.x - anchorX
+                            if (abs(scrubDelta) >= scrubStepPx) {
+                                val steps = (scrubDelta / scrubStepPx).toInt()
+                                if (steps != 0) {
+                                    val dir = if (steps > 0) 1 else -1
+                                    repeat(abs(steps).coerceAtMost(6)) {
+                                        onCursorScrubStep(dir)
+                                    }
+                                    anchorX += steps * scrubStepPx
+                                    triggerHaptic()
+                                }
+                            }
+                            change.consume()
+                        } else if (canSwipe && !isLongPressed) {
                             if (stepDeltaX >= thresholdPx) {
                                 // Swipe Left-to-Right -> Next Language (supports fluid multi-step glide)
                                 hasSwipedAny = true
+                                armScrubJob?.cancel()
                                 lastSwipeDirection = 1
                                 anchorX = change.position.x
                                 dragOffsetX = 0f
@@ -252,6 +294,7 @@ fun SpacebarComponent(
                             } else if (stepDeltaX <= -thresholdPx) {
                                 // Swipe Right-to-Left -> Previous Language
                                 hasSwipedAny = true
+                                armScrubJob?.cancel()
                                 lastSwipeDirection = -1
                                 anchorX = change.position.x
                                 dragOffsetX = 0f
@@ -269,6 +312,8 @@ fun SpacebarComponent(
 
                     isPressed = false
                     dragOffsetX = 0f
+                    isScrubbingCursor = false
+                    armScrubJob?.cancel()
                     longPressJob?.cancel()
                 }
             },
@@ -335,7 +380,7 @@ fun SpacebarComponent(
             }
         }
 
-        // Center Language Label with fluid spring drag tracking & directional slide
+        // Center Language Label OR Cursor Scrub Pill
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -344,7 +389,24 @@ fun SpacebarComponent(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (showLanguageLabel) {
+            if (isScrubbingCursor) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accentColor.copy(alpha = 0.22f))
+                        .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "◀ কার্সর সরছে ▶",
+                        color = accentColor,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+            } else if (showLanguageLabel) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))

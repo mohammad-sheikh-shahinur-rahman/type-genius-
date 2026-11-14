@@ -1,15 +1,18 @@
-
-name: TypeGenius Android APK Build
+name: TypeGenius Android CI & Build
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build Debug APK
+  test_and_build:
+    name: Unit Tests, Debug APK & Optional Release
     runs-on: ubuntu-latest
 
     steps:
@@ -31,13 +34,39 @@ jobs:
       - name: Grant Gradle Permission
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Run Unit & Robolectric Tests
+        run: ./gradlew :app:testDebugUnitTest
 
-      - name: Upload APK
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: TypeGenius-Debug-APK
           path: '**/build/outputs/apk/debug/*.apk'
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Decode Release Keystore (if configured)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > my-upload-key.jks
+
+      - name: Build Signed Release APK & Play App Bundle
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease :app:bundleRelease
+
+      - name: Upload Release Artifacts
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeGenius-Release-Artifacts
+          path: |
+            **/build/outputs/apk/release/*.apk
+            **/build/outputs/bundle/release/*.aab
           retention-days: 30

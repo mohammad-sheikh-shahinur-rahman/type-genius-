@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -37,7 +38,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -837,7 +837,7 @@ fun MoreToolsPanel(
         ToolTile(
             id = KeyboardToolId.UTILITIES,
             label = "তারিখ ও নোট",
-            icon = Icons.Default.EventNote,
+            icon = Icons.AutoMirrored.Filled.EventNote,
             testTag = "tool_utilities",
             onClick = { onHaptic(); onSelectViewMode(KeyboardViewMode.UTILITIES) }
         ),

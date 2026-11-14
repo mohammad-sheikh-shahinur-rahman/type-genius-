@@ -10,7 +10,7 @@ enum class LanguageId(
 ) {
     // South Asian, Bengali & Sylheti Packages
     BANGLA_PROBHAT("bn_probhat", "Bengali (Probhat)", "বাংলা • প্রভাত", "প্রভাত", false, "South Asia"),
-    BANGLA_PHONETIC("bn_phonetic", "Bengali (Avro Phonetic)", "বাংলা • অভ্র ফোনেটিক", "বাংলা", false, "South Asia"),
+    BANGLA_PHONETIC("bn_phonetic", "অভ্র (Avro)", "অভ্র", "অভ্র", false, "South Asia"),
     BANGLA_NATIONAL("bn_national", "Bengali (National / Jatiya)", "বাংলা • জাতীয়", "জাতীয়", false, "South Asia"),
     BANGLA_UNIBIJOY("bn_unibijoy", "Bengali (UniBijoy)", "বাংলা • ইউনিবিজয়", "ইউনিবিজয়", false, "South Asia"),
     SYLHETI("syl", "Sylheti (Syloti Nagri & Bangla)", "সিলেটি • ꠍꠤꠟꠐꠤ ও বাংলা", "সিলেটি", false, "South Asia"),
@@ -49,7 +49,7 @@ enum class LanguageId(
     val scriptLabel: String
         get() = when (this) {
             BANGLA_PROBHAT -> "বাংলা লে-আউট • প্রভাত"
-            BANGLA_PHONETIC -> "অভ্র ফোনেটিক • বাংলা বানান"
+            BANGLA_PHONETIC -> "অভ্র • বাংলা ফোনেটিক"
             BANGLA_NATIONAL -> "বাংলা জাতীয় লে-আউট"
             BANGLA_UNIBIJOY -> "ইউনিবিজয় ক্লাসিক লে-আউট"
             SYLHETI -> "সিলেটি নাগরী ও বাংলা লিপি"

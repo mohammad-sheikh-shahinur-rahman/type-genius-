@@ -97,6 +97,7 @@ import com.example.data.TypingStats
 import com.example.data.TypingStatsManager
 import com.example.model.LanguageId
 import com.example.model.SwipeSensitivity
+import com.example.data.CrashDiagnosticLogger
 import com.example.ui.app.AboutAppScreen
 import com.example.ui.app.AppAboutMetadata
 import com.example.ui.app.AppearanceAndLayoutScreen
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashDiagnosticLogger.installUncaughtHandler(this)
         enableEdgeToEdge()
         settingsManager = SettingsManager.getInstance(this)
 

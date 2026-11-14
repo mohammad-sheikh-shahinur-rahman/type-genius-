@@ -74,7 +74,7 @@ fun QuickToolsNotepadPanel(
                 ttsReady = (status == TextToSpeech.SUCCESS)
                 if (ttsReady) {
                     runCatching {
-                        val bnLocale = Locale("bn", "BD")
+                        val bnLocale = Locale.Builder().setLanguage("bn").setRegion("BD").build()
                         val res = engine?.setLanguage(bnLocale)
                         if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
                             engine?.language = Locale.US
@@ -101,7 +101,7 @@ fun QuickToolsNotepadPanel(
         runCatching {
             val isBangla = clean.any { it.code in 0x0980..0x09FF }
             if (isBangla) {
-                val r = tts.setLanguage(Locale("bn", "BD"))
+                val r = tts.setLanguage(Locale.Builder().setLanguage("bn").setRegion("BD").build())
                 if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts.language = Locale.US
                 }
@@ -120,7 +120,8 @@ fun QuickToolsNotepadPanel(
     val enTime = remember(now) { BengaliCalendarUtils.formatEnglishTime(now) }
     val enDay = remember(now) { BengaliCalendarUtils.formatEnglishWeekday(now) }
     val bnGregDate = remember(now) {
-        val raw = SimpleDateFormat("dd MMMM yyyy", Locale("bn", "BD")).format(now)
+        val bnLocale = Locale.Builder().setLanguage("bn").setRegion("BD").build()
+        val raw = SimpleDateFormat("dd MMMM yyyy", bnLocale).format(now)
         BengaliCalendarUtils.toBengaliDigits(raw)
     }
 

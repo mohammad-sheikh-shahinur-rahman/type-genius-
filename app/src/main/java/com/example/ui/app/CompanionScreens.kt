@@ -598,6 +598,7 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
     val showAltLangKey by settingsManager.showAlternativeLanguageKey.collectAsState(initial = true)
     val isGlideEnabled by settingsManager.isGlideTypingEnabled.collectAsState(initial = true)
     val isBackspaceSwipeEnabled by settingsManager.isBackspaceSwipeEnabled.collectAsState(initial = true)
+    val isCursorScrubEnabled by settingsManager.spacebarCursorScrubEnabled.collectAsState(initial = true)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isTwoCol = maxWidth >= 660.dp
@@ -730,6 +731,14 @@ fun GestureSettingsScreen(settingsManager: SettingsManager) {
                     subtitle = "Show quick script switch button alongside spacebar for 1-tap switching",
                     checked = showAltLangKey,
                     onCheckedChange = { scope.launch { settingsManager.setShowAlternativeLanguageKey(it) } }
+                )
+
+                SettingToggleRow(
+                    title = "স্পেসবার কার্সর স্ক্রাবিং (Cursor Scrub)",
+                    subtitle = "স্পেসবার চেপে ধরে বামে-ডানে স্লাইড করে লেখার কার্সর সরান",
+                    checked = isCursorScrubEnabled,
+                    onCheckedChange = { scope.launch { settingsManager.setSpacebarCursorScrubEnabled(it) } },
+                    switchModifier = Modifier.testTag("toggle_spacebar_cursor_scrub")
                 )
             }
         }
@@ -1082,6 +1091,8 @@ fun GeneralSettingsScreen(
     val oneHandedMode by settingsManager.oneHandedMode.collectAsState(initial = OneHandedMode.FULL)
     val heightPreset by settingsManager.keyboardHeightPreset.collectAsState(initial = KeyboardHeightPreset.NORMAL)
     val floatingMode by settingsManager.floatingMode.collectAsState(initial = false)
+    val keyPopupEnabled by settingsManager.keyPopupEnabled.collectAsState(initial = true)
+    val avroJuktakkhorBarEnabled by settingsManager.avroJuktakkhorBarEnabled.collectAsState(initial = true)
     val geminiApiKey by settingsManager.geminiApiKey.collectAsState(initial = "")
 
     var apiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
@@ -1178,6 +1189,22 @@ fun GeneralSettingsScreen(
                         subtitle = "Hunspell-style on-device autocorrect & fuzzy suggestions",
                         checked = spellCheckEnabled,
                         onCheckedChange = { scope.launch { settingsManager.setSpellCheckEnabled(it) } }
+                    )
+
+                    SettingToggleRow(
+                        title = "কী ট্যাপ ম্যাগনিফায়ার পপআপ",
+                        subtitle = "অক্ষর চাপলে উপরে বড় বাবল প্রিভিউ দেখান",
+                        checked = keyPopupEnabled,
+                        onCheckedChange = { scope.launch { settingsManager.setKeyPopupEnabled(it) } },
+                        switchModifier = Modifier.testTag("toggle_key_popup")
+                    )
+
+                    SettingToggleRow(
+                        title = "অভ্র যুক্তাক্ষর কুইক-হিন্ট বার",
+                        subtitle = "অভ্র কীবোর্ডে ক্ষ, জ্ঞ, ত্র, শ্র ইত্যাদি ১-ট্যাপ যুক্তাক্ষর বার দেখান",
+                        checked = avroJuktakkhorBarEnabled,
+                        onCheckedChange = { scope.launch { settingsManager.setAvroJuktakkhorBarEnabled(it) } },
+                        switchModifier = Modifier.testTag("toggle_avro_juktakkhor_bar")
                     )
 
                     Text("Vibration Intensity", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)

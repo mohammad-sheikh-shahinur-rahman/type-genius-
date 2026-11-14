@@ -218,7 +218,9 @@ class ExampleUnitTest {
         assertFalse(LanguageId.ENGLISH.isRtl)
         assertFalse(LanguageId.BANGLA_PROBHAT.isRtl)
         assertEquals("প্রভাত", LanguageId.BANGLA_PROBHAT.spacebarLabel)
-        assertEquals("বাংলা", LanguageId.BANGLA_PHONETIC.spacebarLabel)
+        assertEquals("অভ্র", LanguageId.BANGLA_PHONETIC.spacebarLabel)
+        assertEquals("অভ্র", LanguageId.BANGLA_PHONETIC.nativeName)
+        assertTrue(LanguageId.BANGLA_PHONETIC.displayName.contains("অভ্র"))
         assertEquals("EN", LanguageId.ENGLISH.spacebarLabel)
     }
 
@@ -775,5 +777,19 @@ class ExampleUnitTest {
         val frakturDigits = UnicodeTextStyler.styleText("Type 789", FancyFontStyle.FRAKTUR_BOLD)
         assertEquals("𝕿𝖞𝖕𝖊 𝟕𝟖𝟗", frakturDigits)
         assertEquals("Type 789", UnicodeTextStyler.unstyleToPlain(frakturDigits))
+    }
+
+    @Test
+    fun testAvroJuktakkhorHints_containsCoreConjuncts() {
+        val hints = KeyboardLayouts.avroJuktakkhorHints
+        assertEquals(12, hints.size)
+        val conjuncts = hints.map { it.glyph }.toSet()
+        listOf("ক্ষ", "জ্ঞ", "ত্র", "শ্র", "ঞ্চ", "ঞ্জ").forEach { expected ->
+            assertTrue("Expected $expected in Avro juktakkhor hints", conjuncts.contains(expected))
+        }
+        hints.forEach { hint ->
+            assertTrue(hint.glyph.isNotBlank())
+            assertTrue(hint.avroCode.isNotBlank())
+        }
     }
 }

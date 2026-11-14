@@ -4,7 +4,9 @@
     android:isDefault="false"
     android:supportsSwitchingToNextInputMethod="true">
     <subtype android:label="বাংলা (প্রভাত)" android:imeSubtypeLocale="bn_BD" android:imeSubtypeMode="keyboard" />
-    <subtype android:label="বাংলা (Avro Phonetic)" android:imeSubtypeLocale="bn_IN" android:imeSubtypeMode="keyboard" />
+    <subtype android:label="অভ্র" android:imeSubtypeLocale="bn_IN" android:imeSubtypeMode="keyboard" />
+    <subtype android:label="বাংলা (জাতীয়)" android:imeSubtypeLocale="bn_BD" android:imeSubtypeMode="keyboard" />
+    <subtype android:label="বাংলা (ইউনিবিজয়)" android:imeSubtypeLocale="bn_BD" android:imeSubtypeMode="keyboard" />
     <subtype android:label="সিলেটি (Sylheti)" android:imeSubtypeLocale="syl_BD" android:imeSubtypeMode="keyboard" />
     <subtype android:label="English (US)" android:imeSubtypeLocale="en_US" android:imeSubtypeMode="keyboard" />
     <subtype android:label="English (UK)" android:imeSubtypeLocale="en_GB" android:imeSubtypeMode="keyboard" />
@@ -13,6 +15,7 @@
     <subtype android:label="اردو (Urdu)" android:imeSubtypeLocale="ur_PK" android:imeSubtypeMode="keyboard" />
     <subtype android:label="অসমীয়া (Assamese)" android:imeSubtypeLocale="as_IN" android:imeSubtypeMode="keyboard" />
     <subtype android:label="नेपाली (Nepali)" android:imeSubtypeLocale="ne_NP" android:imeSubtypeMode="keyboard" />
+    <subtype android:label="संस्कृतम् (Sanskrit)" android:imeSubtypeLocale="sa_IN" android:imeSubtypeMode="keyboard" />
     <subtype android:label="मराठी (Marathi)" android:imeSubtypeLocale="mr_IN" android:imeSubtypeMode="keyboard" />
     <subtype android:label="தமிழ் (Tamil)" android:imeSubtypeLocale="ta_IN" android:imeSubtypeMode="keyboard" />
     <subtype android:label="తెలుగు (Telugu)" android:imeSubtypeLocale="te_IN" android:imeSubtypeMode="keyboard" />

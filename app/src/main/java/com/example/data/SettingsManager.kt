@@ -79,6 +79,10 @@ class SettingsManager(private val context: Context) {
         val KEY_PER_APP_LANG_MAP = stringPreferencesKey("per_app_language_map_json")
         val KEY_FLOATING_OFFSET_X = floatPreferencesKey("floating_offset_x")
         val KEY_FLOATING_OFFSET_Y = floatPreferencesKey("floating_offset_y")
+        val KEY_KEY_POPUP_ENABLED = booleanPreferencesKey("key_popup_magnifier_enabled")
+        val KEY_SPACEBAR_CURSOR_SCRUB = booleanPreferencesKey("spacebar_cursor_scrub_enabled")
+        val KEY_AVRO_JUKTAKKHOR_BAR = booleanPreferencesKey("avro_juktakkhor_bar_enabled")
+        val KEY_HANDWRITING_SIGNATURE = stringPreferencesKey("handwriting_signature")
 
         val DEFAULT_USER_TEMPLATES: List<String> = listOf(
             "আসসালামু আলাইকুম, কেমন আছেন?",
@@ -577,6 +581,38 @@ class SettingsManager(private val context: Context) {
             it[KEY_FLOATING_OFFSET_X] = x
             it[KEY_FLOATING_OFFSET_Y] = y
         }
+    }
+
+    val keyPopupEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_KEY_POPUP_ENABLED] ?: true
+    }
+
+    suspend fun setKeyPopupEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_KEY_POPUP_ENABLED] = enabled }
+    }
+
+    val spacebarCursorScrubEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SPACEBAR_CURSOR_SCRUB] ?: true
+    }
+
+    suspend fun setSpacebarCursorScrubEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SPACEBAR_CURSOR_SCRUB] = enabled }
+    }
+
+    val avroJuktakkhorBarEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AVRO_JUKTAKKHOR_BAR] ?: true
+    }
+
+    suspend fun setAvroJuktakkhorBarEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_AVRO_JUKTAKKHOR_BAR] = enabled }
+    }
+
+    val handwritingSignature: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_HANDWRITING_SIGNATURE] ?: ""
+    }
+
+    suspend fun setHandwritingSignature(signature: String) {
+        context.dataStore.edit { it[KEY_HANDWRITING_SIGNATURE] = signature.trim().take(48) }
     }
 
     fun resolveSmartLanguageForPackage(

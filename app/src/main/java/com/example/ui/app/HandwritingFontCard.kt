@@ -37,6 +37,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +70,7 @@ import com.example.data.KeyboardFontPreset
 import com.example.data.SettingsManager
 import com.example.data.dictionary.FancyFontStyle
 import com.example.model.KeyboardTheme
+import com.example.ui.keyboard.HandwritingCardFormat
 import com.example.ui.keyboard.HandwritingOutputGenerator
 import com.example.ui.keyboard.HandwritingPaperTheme
 import com.example.ui.keyboard.KeyboardThemeData
@@ -89,6 +91,7 @@ fun HandwritingFontSettingsCard(
     val customFontPath by settingsManager.customFontPath.collectAsState(initial = "")
     val customFontName by settingsManager.customFontName.collectAsState(initial = "")
     val activeFancyStyle by settingsManager.activeFancyFontStyle.collectAsState(initial = FancyFontStyle.NORMAL)
+    val savedSignature by settingsManager.handwritingSignature.collectAsState(initial = "")
     val currentTheme by settingsManager.keyboardTheme.collectAsState(initial = KeyboardTheme.MATERIAL_YOU)
     val isDark = isSystemInDarkTheme()
     val kbColors = remember(currentTheme, isDark) {
@@ -98,6 +101,8 @@ fun HandwritingFontSettingsCard(
     var samplePreviewText by remember {
         mutableStateOf("আমার সোনার বাংলা, আমি তোমায় ভালোবাসি • Hello")
     }
+    var signatureInput by remember(savedSignature) { mutableStateOf(savedSignature) }
+    var shareFormat by remember { mutableStateOf(HandwritingCardFormat.CHAT_CARD) }
 
     val activeFontFamily = remember(selectedFontId, customFontPath) {
         CustomFontManager.getFontFamily(context, selectedFontId, customFontPath)
@@ -409,6 +414,39 @@ fun HandwritingFontSettingsCard(
                 }
             }
 
+            OutlinedTextField(
+                value = signatureInput,
+                onValueChange = {
+                    signatureInput = it.take(48)
+                    scope.launch { settingsManager.setHandwritingSignature(signatureInput) }
+                },
+                label = { Text("চিঠি / কার্ডে স্বাক্ষর (ঐচ্ছিক, যেমন: ইতি — শাহিনুর)") },
+                textStyle = TextStyle(fontFamily = activeFontFamily, fontSize = 14.sp),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TGMagenta,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("handwriting_signature_input")
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HandwritingCardFormat.entries.forEach { fmt ->
+                    FilterChip(
+                        selected = shareFormat == fmt,
+                        onClick = { shareFormat = fmt },
+                        label = { Text(fmt.label, fontSize = 12.sp) }
+                    )
+                }
+            }
+
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -461,7 +499,9 @@ fun HandwritingFontSettingsCard(
                                 style = shareStyle,
                                 customFontPath = customFontPath,
                                 customFontName = customFontName,
-                                paperTheme = HandwritingPaperTheme.NOTEBOOK
+                                paperTheme = HandwritingPaperTheme.NOTEBOOK,
+                                format = shareFormat,
+                                signature = signatureInput
                             )
                             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                             val send = Intent(Intent.ACTION_SEND).apply {
@@ -489,7 +529,7 @@ fun HandwritingFontSettingsCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "হাতের লেখা কার্ড হিসেবে শেয়ার করুন (WhatsApp/Messenger)",
+                        text = "হাতের লেখা ${shareFormat.label} শেয়ার করুন (WhatsApp/Messenger)",
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TGMagenta,

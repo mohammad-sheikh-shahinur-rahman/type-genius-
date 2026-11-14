@@ -28,12 +28,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
@@ -49,6 +53,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,10 +66,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.CrashDiagnosticLogger
 import com.example.data.translator.OfflineTranslator
 import com.example.model.LanguageId
 import com.example.ui.theme.TGMagenta
@@ -206,7 +216,7 @@ fun AboutAppScreen(
                     ) {
                         SpecPill("${LanguageId.entries.size} Keyboards")
                         SpecPill("${OfflineTranslator.supportedLanguages.size} Translator Languages")
-                        SpecPill("Avro + UniBijoy + Probhat")
+                        SpecPill("অভ্র + ইউনিবিজয় + প্রভাত")
                         SpecPill("Zero Ads & Zero Telemetry")
                     }
                 }
@@ -368,7 +378,7 @@ fun AboutAppScreen(
                                     type = "text/plain"
                                     putExtra(
                                         Intent.EXTRA_TEXT,
-                                        "Check out ${AppAboutMetadata.APP_NAME} by ${AppAboutMetadata.COMPANY_NAME} — ${LanguageId.entries.size} keyboard languages (Avro, UniBijoy, Probhat, Sylheti), ${OfflineTranslator.supportedLanguages.size} offline translator languages, and privacy-first AI tools!"
+                                        "Check out ${AppAboutMetadata.APP_NAME} by ${AppAboutMetadata.COMPANY_NAME} — ${LanguageId.entries.size} keyboard languages (অভ্র, UniBijoy, Probhat, Sylheti), ${OfflineTranslator.supportedLanguages.size} offline translator languages, and privacy-first AI tools!"
                                     )
                                 }
                                 context.startActivity(Intent.createChooser(intent, "Share ${AppAboutMetadata.APP_NAME}"))
@@ -383,6 +393,176 @@ fun AboutAppScreen(
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = TGMagenta)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("শেয়ার করুন", fontSize = 13.sp, color = TGMagenta)
+                    }
+                }
+            }
+        }
+
+        // Play Store Data Safety & Privacy Policy Card (100% Offline)
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("privacy_policy_card")
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = Color(0xFF2E7D32))
+                    Column {
+                        Text(
+                            text = "গোপনীয়তা নীতি ও Play Store Data Safety",
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "১০০% ব্যাকএন্ডলেস ও শূন্য ডেটা সংগ্রহ ঘোষণা",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Text(
+                    text = "• ডেটা সংগ্রহ (Data Collected): নেই। TypeGenius Keyboard কোনো কী-স্ট্রোক, পাসওয়ার্ড, ক্লিপবোর্ড বা ব্যক্তিগত শব্দকোষ কখনোই কোনো সার্ভারে পাঠায় না।\n" +
+                        "• তৃতীয় পক্ষ শেয়ারিং: শূন্য। কোনো বিজ্ঞাপন SDK, অ্যানালিটিক্স বা ক্র্যাশ-রিপোর্টিং ট্র্যাকার ব্যবহার করা হয়নি।\n" +
+                        "• লোকাল স্টোরেজ: শেখা শব্দ, শর্টকাট, ক্লিপবোর্ড এবং পছন্দসমূহ শুধু আপনার ফোনের অভ্যন্তরীণ Room SQLite ও DataStore-এ থাকে; আপনি যেকোনো সময় মুছে বা অফলাইন .json ব্যাকআপ নিতে পারবেন।\n" +
+                        "• গোপন মোড (Auto-Incognito): পাসওয়ার্ড, ইমেইল, URL ও ইনকগনিটো ফিল্ডে কীবোর্ড স্বয়ংক্রিয়ভাবে শেখা ও ক্লিপবোর্ড সংরক্ষণ বন্ধ রাখে।\n" +
+                        "• ঐচ্ছিক AI ও অনুবাদ: বিল্ট-ইন ৩৮-ভাষার অনুবাদ ও ব্যাকরণ ইঞ্জিন ১০০% অফলাইন। কেবল নিজস্ব Gemini API Key দিলে ব্যবহারকারীর অনুরোধে সরাসরি Google API-তে কল যায়।",
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Offline Crash & Diagnostic Log Viewer Card
+        var logEntries by remember { mutableStateOf(CrashDiagnosticLogger.readLogs(context)) }
+        var showLogsExpanded by remember { mutableStateOf(false) }
+
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("diagnostic_logs_card")
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.BugReport, contentDescription = null, tint = TGMagenta)
+                        Column {
+                            Text(
+                                text = "অফলাইন ক্র্যাশ ও ডায়াগনস্টিক লগ (${logEntries.size})",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "সর্বোচ্চ ৫০টি লগ শুধু ডিভাইসে সংরক্ষিত থাকে — কোনো সার্ভারে যায় না",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { logEntries = CrashDiagnosticLogger.readLogs(context) },
+                        modifier = Modifier.testTag("refresh_logs_button")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh logs", tint = TGMagenta)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            logEntries = CrashDiagnosticLogger.readLogs(context)
+                            showLogsExpanded = !showLogsExpanded
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 44.dp)
+                            .testTag("toggle_logs_viewer_button")
+                    ) {
+                        Text(if (showLogsExpanded) "লগ লুকান" else "লগ দেখুন", fontSize = 12.sp, color = TGMagenta)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val text = CrashDiagnosticLogger.readLogsText(context)
+                            if (text.isBlank()) {
+                                Toast.makeText(context, "কোনো ক্র্যাশ লগ নেই ✓", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                cm?.setPrimaryClip(ClipData.newPlainText("TypeGenius Diagnostics", text))
+                                Toast.makeText(context, "ডায়াগনস্টিক লগ কপি হয়েছে", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 44.dp)
+                            .testTag("copy_logs_button")
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = TGMagenta)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("কপি", fontSize = 12.sp, color = TGMagenta)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            CrashDiagnosticLogger.clearLogs(context)
+                            logEntries = emptyList()
+                            Toast.makeText(context, "ডায়াগনস্টিক লগ মুছে ফেলা হয়েছে", Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 44.dp)
+                            .testTag("clear_logs_button")
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFFD32F2F))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("মুছুন", fontSize = 12.sp, color = Color(0xFFD32F2F))
+                    }
+                }
+
+                if (showLogsExpanded) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = if (logEntries.isEmpty()) {
+                                "কোনো ত্রুটি বা ক্র্যাশ রেকর্ড পাওয়া যায়নি ✓"
+                            } else {
+                                logEntries.joinToString("\n")
+                            },
+                            fontSize = 10.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }

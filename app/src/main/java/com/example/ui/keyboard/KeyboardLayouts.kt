@@ -534,4 +534,24 @@ object KeyboardLayouts {
             add(KeyAction("⌫", null, KeyType.BACKSPACE, weight = 1.25f))
         }
     )
+
+    data class AvroJuktakkhorHint(
+        val glyph: String,
+        val avroCode: String
+    )
+
+    val avroJuktakkhorHints: List<AvroJuktakkhorHint> = listOf(
+        AvroJuktakkhorHint("ক্ষ", "kSh"),
+        AvroJuktakkhorHint("জ্ঞ", "jNG"),
+        AvroJuktakkhorHint("ঞ্চ", "nc"),
+        AvroJuktakkhorHint("ঞ্জ", "nj"),
+        AvroJuktakkhorHint("ত্র", "tr"),
+        AvroJuktakkhorHint("শ্র", "shr"),
+        AvroJuktakkhorHint("ক্ত", "kt"),
+        AvroJuktakkhorHint("ঙ্গ", "ngg"),
+        AvroJuktakkhorHint("হ্ম", "hm"),
+        AvroJuktakkhorHint("ত্থ", "tth"),
+        AvroJuktakkhorHint("ন্দ", "nd"),
+        AvroJuktakkhorHint("ব্ধ", "bdh")
+    )
 }

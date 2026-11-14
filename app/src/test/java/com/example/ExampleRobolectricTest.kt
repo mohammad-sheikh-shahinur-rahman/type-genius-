@@ -349,4 +349,53 @@ class ExampleRobolectricTest {
         dao.clearAll()
         assertTrue(dao.getAllItems().first().isEmpty())
     }
+
+    @Test
+    fun `method xml declares all 33 subtypes including Avro, CrashDiagnosticLogger persists offline, and Portrait Letter PNG renders with signature`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // 1. Verify res/xml/method.xml has all 33 subtypes and Avro naming
+        val subtypeLabels = mutableListOf<String>()
+        val parser = context.resources.getXml(R.xml.method)
+        var event = parser.eventType
+        while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            if (event == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "subtype") {
+                val labelRes = parser.getAttributeResourceValue("http://schemas.android.com/apk/res/android", "label", 0)
+                val rawLabel = if (labelRes != 0) {
+                    context.getString(labelRes)
+                } else {
+                    parser.getAttributeValue("http://schemas.android.com/apk/res/android", "label").orEmpty()
+                }
+                subtypeLabels.add(rawLabel)
+            }
+            event = parser.next()
+        }
+        assertEquals(33, subtypeLabels.size)
+        assertTrue("Expected Avro subtype label 'অভ্র'", subtypeLabels.contains("অভ্র"))
+
+        // 2. Verify CrashDiagnosticLogger writes, reads, and clears cleanly offline
+        com.example.data.CrashDiagnosticLogger.clearLogs(context)
+        com.example.data.CrashDiagnosticLogger.logInfo(context, "IME", "Diagnostic test entry")
+        com.example.data.CrashDiagnosticLogger.logError(context, "TestTag", "Simulated error", IllegalStateException("TestCause"))
+        val logs = com.example.data.CrashDiagnosticLogger.readLogs(context)
+        assertTrue(logs.any { it.contains("Diagnostic test entry") })
+        assertTrue(logs.any { it.contains("Simulated error") && it.contains("IllegalStateException") })
+        com.example.data.CrashDiagnosticLogger.clearLogs(context)
+        assertTrue(com.example.data.CrashDiagnosticLogger.readLogs(context).isEmpty())
+
+        // 3. Verify HandwritingOutputGenerator PORTRAIT_LETTER renders tall PNG with signature
+        val letterFile = com.example.ui.keyboard.HandwritingOutputGenerator.generateHandwritingPngFile(
+            context = context,
+            rawText = "প্রিয় বন্ধু,\nকেমন আছো? হাতের লেখার নতুন চিঠি ফরম্যাট পরীক্ষা করা হচ্ছে।",
+            style = com.example.data.dictionary.FancyFontStyle.HANDWRITING_GALADA,
+            customFontPath = "",
+            paperTheme = com.example.ui.keyboard.HandwritingPaperTheme.NOTEBOOK,
+            format = com.example.ui.keyboard.HandwritingCardFormat.PORTRAIT_LETTER,
+            signature = "শাহিনুর"
+        )
+        assertTrue("Portrait letter PNG should exist", letterFile.exists() && letterFile.length() > 500)
+        val decoded = android.graphics.BitmapFactory.decodeFile(letterFile.absolutePath)
+        assertTrue("Expected tall portrait letter height >= 1240, got ${decoded.height}", decoded.height >= 1240)
+        decoded.recycle()
+    }
 }
